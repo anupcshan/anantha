@@ -1,0 +1,275 @@
+This XML file does not appear to have any style information associated with it. The document tree is shown below.
+<updates xmlns="http://schema.ota.carrier.com">
+<update>
+<type>thermostat</type>
+<model>SYSTXCCITC01-A</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>14.02</version>
+<url>http://www.ota.ing.carrier.com/updates/systxccit-14.02.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccit-14.02.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccit-14.02.html</url>
+</releaseNotes>
+</update>
+<update>
+<type>thermostat</type>
+<model>SYSTXCCITW01-A</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>14.02</version>
+<url>http://www.ota.ing.carrier.com/updates/systxccit-14.02.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccit-14.02.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccit-14.02.html</url>
+</releaseNotes>
+</update>
+<update>
+<type>thermostat</type>
+<model>SYSTXBBECC01-A</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>14.02</version>
+<url>http://www.ota.ing.carrier.com/updates/systxbbec-14.02.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbec-14.02.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbec-14.02.html</url>
+</releaseNotes>
+</update>
+<update>
+<type>thermostat</type>
+<model>SYSTXBBECW01-A</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>14.02</version>
+<url>http://www.ota.ing.carrier.com/updates/systxbbec-14.02.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbec-14.02.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbec-14.02.html</url>
+</releaseNotes>
+</update>
+<update>
+<type>thermostat</type>
+<model>SYSTXCCITC01</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>14.02</version>
+<url>http://www.ota.ing.carrier.com/updates/systxccit-14.02.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccit-14.02.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccit-14.02.html</url>
+</releaseNotes>
+</update>
+<update>
+<type>thermostat</type>
+<model>SYSTXCCITW01</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>14.02</version>
+<url>http://www.ota.ing.carrier.com/updates/systxccit-14.02.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccit-14.02.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccit-14.02.html</url>
+</releaseNotes>
+</update>
+<update>
+<type>thermostat</type>
+<model>SYSTXBBECC01</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>14.02</version>
+<url>http://www.ota.ing.carrier.com/updates/systxbbec-14.02.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbec-14.02.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbec-14.02.html</url>
+</releaseNotes>
+</update>
+<update>
+<type>thermostat</type>
+<model>SYSTXBBECW01</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>14.02</version>
+<url>http://www.ota.ing.carrier.com/updates/systxbbec-14.02.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbec-14.02.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbec-14.02.html</url>
+</releaseNotes>
+</update>
+<!--  BING Variants  -->
+<update>
+<!--   Carrier model; English; black enclosure   -->
+<type>thermostat</type>
+<model>SYSTXCCITC01-B</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>4.56</version>
+<url>http://www.ota.ing.carrier.com/updates/systxccitc01-b-04.56.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccitc01-b-04.56.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccitc01-b-04.56.html</url>
+</releaseNotes>
+</update>
+<update>
+<!--   Carrier model; French; black enclosure   -->
+<type>thermostat</type>
+<model>SYSTXCCICF01-B</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>4.56</version>
+<url>http://www.ota.ing.carrier.com/updates/systxccitc01-b-04.56.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccitc01-b-04.56.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccitc01-b-04.56.html</url>
+</releaseNotes>
+</update>
+<update>
+<!--   Carrier model; English; white enclosure   -->
+<type>thermostat</type>
+<model>SYSTXCCWIC01-B</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>4.56</version>
+<url>http://www.ota.ing.carrier.com/updates/systxccitc01-b-04.56.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccitc01-b-04.56.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccitc01-b-04.56.html</url>
+</releaseNotes>
+</update>
+<update>
+<!--   Carrier model; French; white enclosure   -->
+<type>thermostat</type>
+<model>SYSTXCCWIF01-B</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>4.56</version>
+<url>http://www.ota.ing.carrier.com/updates/systxccitc01-b-04.56.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccitc01-b-04.56.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxccitc01-b-04.56.html</url>
+</releaseNotes>
+</update>
+<update>
+<!--   Bryant model; English; black enclosure   -->
+<type>thermostat</type>
+<model>SYSTXBBECC01-B</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>4.56</version>
+<url>http://www.ota.ing.carrier.com/updates/systxbbecc01-b-04.56.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbecc01-b-04.56.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbecc01-b-04.56.html</url>
+</releaseNotes>
+</update>
+<update>
+<!--   Bryant model; French; black enclosure   -->
+<type>thermostat</type>
+<model>SYSTXBBECF01-B</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>4.56</version>
+<url>http://www.ota.ing.carrier.com/updates/systxbbecc01-b-04.56.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbecc01-b-04.56.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbecc01-b-04.56.html</url>
+</releaseNotes>
+</update>
+<update>
+<!--   Bryant model; English; white enclosure   -->
+<type>thermostat</type>
+<model>SYSTXBBWEC01-B</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>4.56</version>
+<url>http://www.ota.ing.carrier.com/updates/systxbbecc01-b-04.56.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbecc01-b-04.56.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbecc01-b-04.56.html</url>
+</releaseNotes>
+</update>
+<update>
+<!--   Bryant model; French; white enclosure   -->
+<type>thermostat</type>
+<model>SYSTXBBWEF01-B</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>4.56</version>
+<url>http://www.ota.ing.carrier.com/updates/systxbbecc01-b-04.56.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbecc01-b-04.56.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/systxbbecc01-b-04.56.html</url>
+</releaseNotes>
+</update>
+<update>
+<!--  Ion model; English; black enclosure   -->
+<type>thermostat</type>
+<model>SYST0101CW</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>4.56</version>
+<url>http://www.ota.ing.carrier.com/updates/syst0101cw-04.56.hex</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/syst0101cw-04.56.txt</url>
+<url type="text/html" locale="en-us">http://www.ota.ing.carrier.com/releaseNotes/syst0101cw-04.56.html</url>
+</releaseNotes>
+</update>
+<!--  CING Variants  -->
+<!-- Typo in model number SYTSXCCITC01-C is intentional -->
+<update>
+<type>thermostat</type>
+<model>SYTSXCCITC01-C</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>01.50</version>
+<url>https://www.ota.ing.carrier.com/updates/CINF0150.BEX</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">https://www.ota.ing.carrier.com/releaseNotes/SYSTXCCITC01-C-01.50.txt</url>
+<url type="text/html" locale="en-us">https://www.ota.ing.carrier.com/releaseNotes/SYSTXCCITC01-C-01.50.html</url>
+</releaseNotes>
+</update>
+<update>
+<type>thermostat</type>
+<model>SYSTXCCITC01-C</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>01.50</version>
+<url>https://www.ota.ing.carrier.com/updates/CINF0150.BEX</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">https://www.ota.ing.carrier.com/releaseNotes/SYSTXCCITC01-C-01.50.txt</url>
+<url type="text/html" locale="en-us">https://www.ota.ing.carrier.com/releaseNotes/SYSTXCCITC01-C-01.50.html</url>
+</releaseNotes>
+</update>
+<update>
+<type>thermostat</type>
+<model>SYSTXBBECC01-C</model>
+<locales>
+<locale>en-us</locale>
+</locales>
+<version>01.50</version>
+<url>https://www.ota.ing.carrier.com/updates/CINF0150.BEX</url>
+<releaseNotes>
+<url type="text/plain" locale="en-us">https://www.ota.ing.carrier.com/releaseNotes/SYSTXBBECC01-C-01.50.txt</url>
+<url type="text/html" locale="en-us">https://www.ota.ing.carrier.com/releaseNotes/SYSTXBBECC01-C-01.50.html</url>
+</releaseNotes>
+</update>
+</updates>

@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package carrier;
+
+option go_package = "github.com/anupcshan/anantha/pb/carrier";
+
+// There's recursion in message definition. This almost feels like an off the shelf library/proto
+// being used to synchronize data structures between server and client.
+// Looks very similar to google.protobuf.Type.
+
+message Detail {
+	repeated ConfigSetting entries = 2;
+	string detail_type_str = 4;
+	int32 zero = 5;
+}
+
+enum ConfigType {
+	CT_UNKNOWN = 0;
+	CT_TEMP = 1; // Temp in C
+	CT_INT16 = 2; // Also used for small values. May be negative.
+	CT_INT = 3; // Mostly temp in F (system/oat)
+	CT_UINT16 = 5; // Generally used for values under 100, like percentages and temp in F - not negative
+	CT_INT32 = 6;
+	CT_INT64 = 7; // What's the difference betweeen 6 and 7? 7 seems to be used for yearly kWh values, while 6 is used for monthly/weekly
+	CT_SEQ = 8; // This seems to be used only for "bdSeq", with id 11 set to int(5) or int(2). Probably a sequence number
+	CT_FLOAT = 9;
+	CT_BOOL = 11; // ??
+	CT_STRING = 12; // ??
+	CT_BYTES = 17; // ??
+	CT_STRUCT = 19; // ??
+}
+
+message ConfigSetting {
+	string name = 1;
+	int64 timestamp_millis = 3;
+	ConfigType config_type = 4;
+	oneof value {
+		ConfigType config_type_copy = 7; // Appears to have same value as 4 in a lot of cases.
+		int32 int_value = 10;
+		int32 another_int_value = 11; // Used for intervals, requestID, counters, hours, .... All values are < 9000?
+		float float_value = 12;
+		bool bool_value = 14;
+		bytes maybe_str_value = 15;
+		bytes bytes_value = 16;
+	}
+	repeated Detail details = 18;
+}
+
+message CarrierInfo {
+	int64 timestamp_millis = 1;
+	repeated ConfigSetting config_settings = 2;
+	int32 counter = 3; // What is this?
+	string uuid = 4;
+}

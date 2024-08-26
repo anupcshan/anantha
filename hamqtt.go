@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 
 	carrier "github.com/anupcshan/anantha/pb"
 	mqtt_paho "github.com/eclipse/paho.mqtt.golang"
@@ -196,6 +197,110 @@ func (h *HAMQTT) Run() {
 					},
 				})
 			}
+		},
+	)
+
+	h.subscribe("zone/1/temp_high/set",
+		func(_ mqtt_paho.Client, msg mqtt_paho.Message) {
+			log.Printf("About to set high temp for zone 1 to %s", msg.Payload())
+			clsp, err := strconv.ParseFloat(string(msg.Payload()), 32)
+			if err != nil {
+				log.Printf("Unable to parse cool setpoint %s: %s", msg.Payload(), err)
+			}
+			h.sendCommand([]*carrier.ConfigSetting{
+				{
+					Name:       "zones/1/hold/hold",
+					ConfigType: carrier.ConfigType_CT_BOOL,
+					Value: &carrier.ConfigSetting_BoolValue{
+						BoolValue: true,
+					},
+				},
+				{
+					Name:       "zones/1/hold/holdActivity",
+					ConfigType: carrier.ConfigType_CT_STRING,
+					Value: &carrier.ConfigSetting_MaybeStrValue{
+						MaybeStrValue: []byte("manual"),
+					},
+				},
+				{
+					Name:       "zones/1/hold/otmr",
+					ConfigType: carrier.ConfigType_CT_STRING,
+					Value:      &carrier.ConfigSetting_MaybeStrValue{},
+				},
+				{
+					Name:       "zones/1/activities/manual/clsp",
+					ConfigType: carrier.ConfigType_CT_FLOAT,
+					Value: &carrier.ConfigSetting_FloatValue{
+						FloatValue: float32(clsp),
+					},
+				},
+				{
+					Name:       "zones/1/activities/manual/htsp",
+					ConfigType: carrier.ConfigType_CT_FLOAT,
+					Value: &carrier.ConfigSetting_FloatValue{
+						FloatValue: h.loadedValues.Get("1/htsp").value.GetFloatValue(),
+					},
+				},
+				{
+					Name:       "zones/1/activities/manual/fan",
+					ConfigType: carrier.ConfigType_CT_STRING,
+					Value: &carrier.ConfigSetting_MaybeStrValue{
+						MaybeStrValue: h.loadedValues.Get("1/fan").value.GetMaybeStrValue(),
+					},
+				},
+			})
+		},
+	)
+
+	h.subscribe("zone/1/temp_low/set",
+		func(_ mqtt_paho.Client, msg mqtt_paho.Message) {
+			log.Printf("About to set low temp for zone 1 to %s", msg.Payload())
+			htsp, err := strconv.ParseFloat(string(msg.Payload()), 32)
+			if err != nil {
+				log.Printf("Unable to parse heat setpoint %s: %s", msg.Payload(), err)
+			}
+			h.sendCommand([]*carrier.ConfigSetting{
+				{
+					Name:       "zones/1/hold/hold",
+					ConfigType: carrier.ConfigType_CT_BOOL,
+					Value: &carrier.ConfigSetting_BoolValue{
+						BoolValue: true,
+					},
+				},
+				{
+					Name:       "zones/1/hold/holdActivity",
+					ConfigType: carrier.ConfigType_CT_STRING,
+					Value: &carrier.ConfigSetting_MaybeStrValue{
+						MaybeStrValue: []byte("manual"),
+					},
+				},
+				{
+					Name:       "zones/1/hold/otmr",
+					ConfigType: carrier.ConfigType_CT_STRING,
+					Value:      &carrier.ConfigSetting_MaybeStrValue{},
+				},
+				{
+					Name:       "zones/1/activities/manual/clsp",
+					ConfigType: carrier.ConfigType_CT_FLOAT,
+					Value: &carrier.ConfigSetting_FloatValue{
+						FloatValue: h.loadedValues.Get("1/clsp").value.GetFloatValue(),
+					},
+				},
+				{
+					Name:       "zones/1/activities/manual/htsp",
+					ConfigType: carrier.ConfigType_CT_FLOAT,
+					Value: &carrier.ConfigSetting_FloatValue{
+						FloatValue: float32(htsp),
+					},
+				},
+				{
+					Name:       "zones/1/activities/manual/fan",
+					ConfigType: carrier.ConfigType_CT_STRING,
+					Value: &carrier.ConfigSetting_MaybeStrValue{
+						MaybeStrValue: h.loadedValues.Get("1/fan").value.GetMaybeStrValue(),
+					},
+				},
+			})
 		},
 	)
 

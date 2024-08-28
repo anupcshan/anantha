@@ -147,6 +147,8 @@ type MQTTLogger struct {
 	forwardMessageLock sync.Mutex
 
 	loadedValues *LoadedValues
+
+	liveClients map[string]struct{}
 }
 
 // ID returns the ID of the hook.
@@ -182,6 +184,11 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 	switch pk.FixedHeader.Type {
 	case packets.Publish:
 		log.Printf("%s from %s: %s [len: %d]", strings.ToUpper(packets.PacketNames[pk.FixedHeader.Type]), cl.ID, pk.TopicName, len(pk.Payload))
+		if (m.thingNameOverride != "" && strings.HasSuffix(pk.TopicName, m.thingNameOverride)) ||
+			(m.thingNameOverride == "" && strings.HasSuffix(pk.TopicName, m.clientID)) {
+			// Client sent initial PUBLISH - ready to poll it
+			m.liveClients[cl.ID] = struct{}{}
+		}
 		if err := os.WriteFile(
 			fmt.Sprintf(
 				"%s/%s-%s.pb",
@@ -254,6 +261,9 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 			}
 			m.subscribedTopicsLock.Unlock()
 		}
+	case packets.Connect:
+		// Empty liveClients list on CONNECT. Make sure we get a PUBLISH spBv1.0/WallCtrl/NDATA/<thingName> before polling
+		m.liveClients = map[string]struct{}{}
 	default:
 		log.Printf("%s from %s", strings.ToUpper(packets.PacketNames[pk.FixedHeader.Type]), cl.ID)
 	}
@@ -806,7 +816,7 @@ func main() {
 		}))
 		level.Set(slog.LevelInfo)
 
-		if err := server.AddHook(&MQTTLogger{
+		mLogger := &MQTTLogger{
 			server:            server,
 			savedReqsDir:      *savedReqsDir,
 			iotMQTTClient:     awsIOTMQTTClient,
@@ -814,7 +824,10 @@ func main() {
 			thingNameOverride: *thingNameOverride,
 			subscribedTopics:  make(map[string]struct{}),
 			loadedValues:      loadedValues,
-		}, nil); err != nil {
+			liveClients:       make(map[string]struct{}),
+		}
+
+		if err := server.AddHook(mLogger, nil); err != nil {
 			log.Fatal(err)
 		}
 
@@ -1017,16 +1030,27 @@ func main() {
 		if awsIOTMQTTClient == nil {
 			// If we're not proxying to AWS IOT, poll every minute
 			for range time.Tick(time.Minute) {
-				log.Printf("Polling NCMD event_update_mode_active: %+v %+v", server.Clients.Len(), server.Clients.GetAll())
-				publishProto([]*carrier.ConfigSetting{
-					{
-						Name:       "event_update_mode_active",
-						ConfigType: carrier.ConfigType_CT_BOOL,
-						Value: &carrier.ConfigSetting_BoolValue{
-							BoolValue: true,
+				hasLiveClient := false
+				for connectedClientId := range server.Clients.GetAll() {
+					if connectedClientId == "inline" {
+						continue
+					}
+					if _, ok := mLogger.liveClients[connectedClientId]; ok {
+						hasLiveClient = true
+					}
+				}
+				if hasLiveClient {
+					log.Printf("Polling NCMD event_update_mode_active: %+v %+v", server.Clients.Len(), server.Clients.GetAll())
+					publishProto([]*carrier.ConfigSetting{
+						{
+							Name:       "event_update_mode_active",
+							ConfigType: carrier.ConfigType_CT_BOOL,
+							Value: &carrier.ConfigSetting_BoolValue{
+								BoolValue: true,
+							},
 						},
-					},
-				})
+					})
+				}
 			}
 		}
 	}()

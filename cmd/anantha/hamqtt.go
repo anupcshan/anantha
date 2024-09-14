@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
@@ -79,6 +80,17 @@ func computeCurrentAction(opmode string, opstat string) string {
 func (h *HAMQTT) publish(topicSuffix string, value string) error {
 	token := h.mqttClient.Publish(
 		fmt.Sprintf("%s/%s", h.topicPrefix, topicSuffix),
+		0, true,
+		value,
+	)
+
+	token.Wait()
+	return token.Error()
+}
+
+func (h *HAMQTT) publishRaw(topic string, value string) error {
+	token := h.mqttClient.Publish(
+		topic,
 		0, true,
 		value,
 	)
@@ -303,6 +315,56 @@ func (h *HAMQTT) Run() {
 			})
 		},
 	)
+
+	h.loadedValues.OnChange1("profile/serial", func(tv TimestampedValue) {
+		discoveryMsg := struct {
+			Name                        string   `json:"name"`
+			ActionTopic                 string   `json:"action_topic"`
+			CurrentHumidityTopic        string   `json:"current_humidity_topic"`
+			CurrentTemperatureTopic     string   `json:"current_temperature_topic"`
+			FanModeCommandTopic         string   `json:"fan_mode_command_topic"`
+			FanModeStateTopic           string   `json:"fan_mode_state_topic"`
+			TemperatureLowCommandTopic  string   `json:"temperature_low_command_topic"`
+			TemperatureLowStateTopic    string   `json:"temperature_low_state_topic"`
+			TemperatureHighCommandTopic string   `json:"temperature_high_command_topic"`
+			TemperatureHighStateTopic   string   `json:"temperature_high_state_topic"`
+			PresetModeCommandTopic      string   `json:"preset_mode_command_topic"`
+			PresetModeStateTopic        string   `json:"preset_mode_state_topic"`
+			PresetModes                 []string `json:"preset_modes"`
+			ModeCommandTopic            string   `json:"mode_command_topic"`
+			ModeStateTopic              string   `json:"mode_state_topic"`
+			Modes                       []string `json:"modes"`
+		}{
+			Name:                        "carrier",
+			ActionTopic:                 fmt.Sprintf("%s/action/current", h.topicPrefix),
+			CurrentHumidityTopic:        fmt.Sprintf("%s/zone/1/humidity/current", h.topicPrefix),
+			CurrentTemperatureTopic:     fmt.Sprintf("%s/zone/1/temperature/current", h.topicPrefix),
+			FanModeCommandTopic:         fmt.Sprintf("%s/zone/1/fanmode/set", h.topicPrefix),
+			FanModeStateTopic:           fmt.Sprintf("%s/zone/1/fanmode/current", h.topicPrefix),
+			TemperatureLowCommandTopic:  fmt.Sprintf("%s/zone/1/temp_low/set", h.topicPrefix),
+			TemperatureLowStateTopic:    fmt.Sprintf("%s/zone/1/temp_low/current", h.topicPrefix),
+			TemperatureHighCommandTopic: fmt.Sprintf("%s/zone/1/temp_high/set", h.topicPrefix),
+			TemperatureHighStateTopic:   fmt.Sprintf("%s/zone/1/temp_high/current", h.topicPrefix),
+			PresetModeCommandTopic:      fmt.Sprintf("%s/zone/1/preset_mode/set", h.topicPrefix),
+			PresetModeStateTopic:        fmt.Sprintf("%s/zone/1/preset_mode/current", h.topicPrefix),
+			PresetModes:                 []string{"away", "home", "manual", "sleep", "wake"},
+			ModeCommandTopic:            fmt.Sprintf("%s/mode/set", h.topicPrefix),
+			ModeStateTopic:              fmt.Sprintf("%s/mode/current", h.topicPrefix),
+			Modes:                       []string{"auto", "off", "cool", "heat", "fan_only"},
+		}
+		discoveryMsgJSON, err := json.Marshal(discoveryMsg)
+		if err != nil {
+			log.Printf("Failed to encode discovery message: %s", err)
+			return
+		}
+
+		if err := h.publishRaw(
+			fmt.Sprintf("homeassistant/climate/%s/config", tv.value.GetMaybeStrValue()),
+			string(discoveryMsgJSON),
+		); err != nil {
+			log.Printf("Error publishing discovery message: %s", err)
+		}
+	})
 
 	h.loadedValues.OnChange1("1/clsp", func(clsp TimestampedValue) {
 		// Causes climate card to show nothing if we send None here.

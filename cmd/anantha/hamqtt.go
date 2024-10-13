@@ -219,26 +219,46 @@ func (h *HAMQTT) Run() {
 			if err != nil {
 				log.Printf("Unable to parse cool setpoint %s: %s", msg.Payload(), err)
 			}
-			h.sendCommand([]*carrier.ConfigSetting{
-				{
-					Name:       "zones/1/hold/hold",
-					ConfigType: carrier.ConfigType_CT_BOOL,
-					Value: &carrier.ConfigSetting_BoolValue{
-						BoolValue: true,
+			var cfgSettings []*carrier.ConfigSetting
+			if string(h.loadedValues.Get("1/currentActivity").value.GetMaybeStrValue()) != "manual" {
+				cfgSettings = append(cfgSettings, []*carrier.ConfigSetting{
+					{
+						Name:       "zones/1/hold/hold",
+						ConfigType: carrier.ConfigType_CT_BOOL,
+						Value: &carrier.ConfigSetting_BoolValue{
+							BoolValue: true,
+						},
 					},
-				},
-				{
-					Name:       "zones/1/hold/holdActivity",
-					ConfigType: carrier.ConfigType_CT_STRING,
-					Value: &carrier.ConfigSetting_MaybeStrValue{
-						MaybeStrValue: []byte("manual"),
+					{
+						Name:       "zones/1/hold/holdActivity",
+						ConfigType: carrier.ConfigType_CT_STRING,
+						Value: &carrier.ConfigSetting_MaybeStrValue{
+							MaybeStrValue: []byte("manual"),
+						},
 					},
-				},
-				{
-					Name:       "zones/1/hold/otmr",
-					ConfigType: carrier.ConfigType_CT_STRING,
-					Value:      &carrier.ConfigSetting_MaybeStrValue{},
-				},
+					{
+						Name:       "zones/1/hold/otmr",
+						ConfigType: carrier.ConfigType_CT_STRING,
+						Value:      &carrier.ConfigSetting_MaybeStrValue{},
+					},
+					{
+						Name:       "zones/1/activities/manual/htsp",
+						ConfigType: carrier.ConfigType_CT_FLOAT,
+						Value: &carrier.ConfigSetting_FloatValue{
+							FloatValue: h.loadedValues.Get("1/htsp").value.GetFloatValue(),
+						},
+					},
+					{
+						Name:       "zones/1/activities/manual/fan",
+						ConfigType: carrier.ConfigType_CT_STRING,
+						Value: &carrier.ConfigSetting_MaybeStrValue{
+							MaybeStrValue: h.loadedValues.Get("1/fan").value.GetMaybeStrValue(),
+						},
+					},
+				}...)
+			}
+
+			cfgSettings = append(cfgSettings, []*carrier.ConfigSetting{
 				{
 					Name:       "zones/1/activities/manual/clsp",
 					ConfigType: carrier.ConfigType_CT_FLOAT,
@@ -246,21 +266,9 @@ func (h *HAMQTT) Run() {
 						FloatValue: float32(clsp),
 					},
 				},
-				{
-					Name:       "zones/1/activities/manual/htsp",
-					ConfigType: carrier.ConfigType_CT_FLOAT,
-					Value: &carrier.ConfigSetting_FloatValue{
-						FloatValue: h.loadedValues.Get("1/htsp").value.GetFloatValue(),
-					},
-				},
-				{
-					Name:       "zones/1/activities/manual/fan",
-					ConfigType: carrier.ConfigType_CT_STRING,
-					Value: &carrier.ConfigSetting_MaybeStrValue{
-						MaybeStrValue: h.loadedValues.Get("1/fan").value.GetMaybeStrValue(),
-					},
-				},
-			})
+			}...,
+			)
+			h.sendCommand(cfgSettings)
 		},
 	)
 
@@ -271,33 +279,52 @@ func (h *HAMQTT) Run() {
 			if err != nil {
 				log.Printf("Unable to parse heat setpoint %s: %s", msg.Payload(), err)
 			}
-			h.sendCommand([]*carrier.ConfigSetting{
-				{
-					Name:       "zones/1/hold/hold",
-					ConfigType: carrier.ConfigType_CT_BOOL,
-					Value: &carrier.ConfigSetting_BoolValue{
-						BoolValue: true,
+			var cfgSettings []*carrier.ConfigSetting
+			// If current activity is already manual, don't send the same values down again.
+			// NOTE: There is a problem here interacting with Home Assistant. It sends both
+			// "temp_low/set" and "temp_high/set" when changing temperature, in that order.
+			// So the value of "htsp" set by "temp_low/set" gets clobbered by "temp_high/set"
+			// handler immediately after, because we haven't yet gotten a response from the
+			// thermostat to update "1/htsp".
+			if string(h.loadedValues.Get("1/currentActivity").value.GetMaybeStrValue()) != "manual" {
+				cfgSettings = append(cfgSettings, []*carrier.ConfigSetting{
+					{
+						Name:       "zones/1/hold/hold",
+						ConfigType: carrier.ConfigType_CT_BOOL,
+						Value: &carrier.ConfigSetting_BoolValue{
+							BoolValue: true,
+						},
 					},
-				},
-				{
-					Name:       "zones/1/hold/holdActivity",
-					ConfigType: carrier.ConfigType_CT_STRING,
-					Value: &carrier.ConfigSetting_MaybeStrValue{
-						MaybeStrValue: []byte("manual"),
+					{
+						Name:       "zones/1/hold/holdActivity",
+						ConfigType: carrier.ConfigType_CT_STRING,
+						Value: &carrier.ConfigSetting_MaybeStrValue{
+							MaybeStrValue: []byte("manual"),
+						},
 					},
-				},
-				{
-					Name:       "zones/1/hold/otmr",
-					ConfigType: carrier.ConfigType_CT_STRING,
-					Value:      &carrier.ConfigSetting_MaybeStrValue{},
-				},
-				{
-					Name:       "zones/1/activities/manual/clsp",
-					ConfigType: carrier.ConfigType_CT_FLOAT,
-					Value: &carrier.ConfigSetting_FloatValue{
-						FloatValue: h.loadedValues.Get("1/clsp").value.GetFloatValue(),
+					{
+						Name:       "zones/1/hold/otmr",
+						ConfigType: carrier.ConfigType_CT_STRING,
+						Value:      &carrier.ConfigSetting_MaybeStrValue{},
 					},
-				},
+					{
+						Name:       "zones/1/activities/manual/clsp",
+						ConfigType: carrier.ConfigType_CT_FLOAT,
+						Value: &carrier.ConfigSetting_FloatValue{
+							FloatValue: h.loadedValues.Get("1/clsp").value.GetFloatValue(),
+						},
+					},
+					{
+						Name:       "zones/1/activities/manual/fan",
+						ConfigType: carrier.ConfigType_CT_STRING,
+						Value: &carrier.ConfigSetting_MaybeStrValue{
+							MaybeStrValue: h.loadedValues.Get("1/fan").value.GetMaybeStrValue(),
+						},
+					},
+				}...)
+			}
+
+			cfgSettings = append(cfgSettings, []*carrier.ConfigSetting{
 				{
 					Name:       "zones/1/activities/manual/htsp",
 					ConfigType: carrier.ConfigType_CT_FLOAT,
@@ -305,14 +332,9 @@ func (h *HAMQTT) Run() {
 						FloatValue: float32(htsp),
 					},
 				},
-				{
-					Name:       "zones/1/activities/manual/fan",
-					ConfigType: carrier.ConfigType_CT_STRING,
-					Value: &carrier.ConfigSetting_MaybeStrValue{
-						MaybeStrValue: h.loadedValues.Get("1/fan").value.GetMaybeStrValue(),
-					},
-				},
-			})
+			}...,
+			)
+			h.sendCommand(cfgSettings)
 		},
 	)
 

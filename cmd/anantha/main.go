@@ -607,13 +607,13 @@ func main() {
 		_ = dnsServer.Shutdown()
 	})
 
-	clientCert, err := tls.LoadX509KeyPair("tls/client/cert.pem", "tls/client/key.pem")
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	var awsIOTMQTTClient mqtt_paho.Client
 	if *proxyToAWSIOT {
+		clientCert, err := tls.LoadX509KeyPair("tls/client/cert.pem", "tls/client/key.pem")
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		awsIOTMQTTClient = mqtt_paho.NewClient(
 			mqtt_paho.NewClientOptions().
 				AddBroker("mqtts://mqtt.res.carrier.io:443").

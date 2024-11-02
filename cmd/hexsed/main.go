@@ -35,8 +35,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("%+v", updateCfg)
-
 	buf := membuf.NewMemBuffer()
 	parser := intelhex.NewParser(f, buf)
 	for {

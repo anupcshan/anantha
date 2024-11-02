@@ -9,8 +9,8 @@ import (
 	"os"
 	"sort"
 
-	"github.com/anupcshan/anantha/intelhex"
 	"github.com/anupcshan/anantha/certs"
+	"github.com/anupcshan/anantha/intelhex"
 )
 
 type UpdateConfig struct {
@@ -214,7 +214,7 @@ func updateWithPermutations(buf []byte, modifyRange []byte, targetChecksum uint8
 		spaces--
 	}
 
-	log.Printf("%x vs %x", checksum(buf), targetChecksum)
+	// log.Printf("%x vs %x", checksum(buf), targetChecksum)
 	if checksum(buf) == targetChecksum {
 		return nil
 	}
@@ -289,15 +289,15 @@ func (m *memBuffer) ReadAt(p []byte, off int64) (int, error) {
 		right := min(offsetInBlob+int64(len(p)), pickBuffer.update.begin+pickBuffer.update.length)
 
 		if left < right {
-			log.Printf(
-				"Overlap detected: [%d, %d) & [%d, %d) -> [%d, %d)",
-				pickBuffer.update.begin,
-				pickBuffer.update.begin+pickBuffer.update.length,
-				offsetInBlob,
-				offsetInBlob+int64(len(p)),
-				left,
-				right,
-			)
+			// log.Printf(
+			// 	"Overlap detected: [%d, %d) & [%d, %d) -> [%d, %d)",
+			// 	pickBuffer.update.begin,
+			// 	pickBuffer.update.begin+pickBuffer.update.length,
+			// 	offsetInBlob,
+			// 	offsetInBlob+int64(len(p)),
+			// 	left,
+			// 	right,
+			// )
 
 			permute := p[left-offsetInBlob : right-offsetInBlob]
 
@@ -364,13 +364,13 @@ func (m *memBuffer) Update(updateCfg *UpdateConfig, records []intelhex.Record) {
 
 		length := bytes.Index(buf.buf[begin:], []byte(updateCfg.SearchEnd)) + len(updateCfg.SearchEnd)
 
-		log.Printf("Begin: %d (%d%%128), offset: %d, length: %d, blob: \n%s", begin, begin%128, buf.offset, length, buf.buf[begin:begin+length])
+		// log.Printf("Begin: %d (%d%%128), offset: %d, length: %d", begin, begin%128, buf.offset, length)
 
 		firstSliceLen := -1
 		for _, rec := range records {
 			if rec.ReadOffset >= buf.offset+int64(begin) {
 				firstSliceLen = int(rec.ReadOffset - buf.offset - int64(begin))
-				log.Printf("Found hex record: %+v, firstSliceLen: %d", rec, firstSliceLen)
+				log.Printf("Found update section with firstSliceLen: %d", firstSliceLen)
 				break
 			}
 		}
@@ -393,8 +393,6 @@ func (m *memBuffer) Update(updateCfg *UpdateConfig, records []intelhex.Record) {
 		if len(replacements[0].str) == 0 {
 			log.Fatalf("No replacement available for firstSliceLen: %d", firstSliceLen)
 		}
-
-		log.Printf("Replacement: \n%s", replacements[0].str)
 
 		buf.update = &updateT{
 			begin:  int64(begin),

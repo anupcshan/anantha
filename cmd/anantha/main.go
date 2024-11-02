@@ -478,7 +478,6 @@ func main() {
 	log.SetFlags(log.Lmicroseconds | log.Lshortfile)
 
 	var shutdownFuncs []func()
-	var shutdownFuncLock sync.Mutex
 
 	loadedValues := NewLoadedValues()
 
@@ -842,12 +841,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	shutdownFuncLock.Lock()
 	shutdownFuncs = append(shutdownFuncs, func() {
 		log.Println("Shutting down MQTT")
 		server.Close()
 	})
-	shutdownFuncLock.Unlock()
 
 	if err = server.Serve(); err != nil {
 		log.Fatal(err)
@@ -1071,11 +1068,9 @@ func main() {
 
 	log.Println("Received signal. Beginning orderly shutdown")
 
-	shutdownFuncLock.Lock()
 	for _, shutdownFunc := range shutdownFuncs {
 		shutdownFunc()
 	}
-	shutdownFuncLock.Unlock()
 }
 
 type CertificateAndKeyResponse struct {

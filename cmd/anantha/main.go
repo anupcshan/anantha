@@ -786,249 +786,248 @@ func main() {
 		}
 	}()
 
-	go func() {
-		cert, err := tls.LoadX509KeyPair("tls/server/cert-bundle.pem", "tls/server/key.pem")
+	cert, err := tls.LoadX509KeyPair("tls/server/cert-bundle.pem", "tls/server/key.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tlsConfig := &tls.Config{
+		GetCertificate: func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			log.Printf("GetCertificate for %s", chi.ServerName)
+			return &cert, nil
+		},
+		GetClientCertificate: func(req *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			log.Printf("GetClientCertificate: %+v", req)
+			return nil, nil
+		},
+		ClientAuth: tls.RequestClientCert,
+	}
+	tcp := listeners.NewTCP(listeners.Config{
+		ID:        "t1",
+		Address:   ":8883",
+		TLSConfig: tlsConfig,
+	})
+
+	server := mqtt.New(&mqtt.Options{
+		InlineClient: true, // you must enable inline client to use direct publishing and subscribing.
+	})
+
+	level := new(slog.LevelVar)
+	server.Log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	}))
+	level.Set(slog.LevelInfo)
+
+	mLogger := &MQTTLogger{
+		server:            server,
+		savedReqsDir:      *savedReqsDir,
+		iotMQTTClient:     awsIOTMQTTClient,
+		clientID:          *clientID,
+		thingNameOverride: *thingNameOverride,
+		subscribedTopics:  make(map[string]struct{}),
+		loadedValues:      loadedValues,
+		liveClients:       make(map[string]struct{}),
+	}
+
+	if err := server.AddHook(mLogger, nil); err != nil {
+		log.Fatal(err)
+	}
+
+	err = server.AddListener(tcp)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = server.AddHook(new(auth.AllowHook), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	shutdownFuncLock.Lock()
+	shutdownFuncs = append(shutdownFuncs, func() {
+		log.Println("Shutting down MQTT")
+		server.Close()
+	})
+	shutdownFuncLock.Unlock()
+
+	if err = server.Serve(); err != nil {
+		log.Fatal(err)
+	}
+
+	clientCert, err := os.ReadFile("tls/client/cert.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	clientKey, err := os.ReadFile("tls/client/key.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := server.Subscribe("$aws/certificates/create/cbor", 1, func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
+		server.Log.Info("inline client received message from subscription", "client", cl.ID, "subscriptionId", sub.Identifier, "topic", pk.TopicName, "payload", string(pk.Payload))
+
+		certAndKey := &CertificateAndKeyResponse{
+			CertificateId:             "foo",
+			CertificateOwnershipToken: "hello",
+			CertificatePem:            string(clientCert),
+			PrivateKey:                string(clientKey),
+		}
+
+		payload, err := cbor.Marshal(certAndKey)
 		if err != nil {
 			log.Fatal(err)
 		}
-		tlsConfig := &tls.Config{
-			GetCertificate: func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) {
-				log.Printf("GetCertificate for %s", chi.ServerName)
-				return &cert, nil
-			},
-			GetClientCertificate: func(req *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-				log.Printf("GetClientCertificate: %+v", req)
-				return nil, nil
-			},
-			ClientAuth: tls.RequestClientCert,
+
+		if err := server.Publish("$aws/certificates/create/cbor/accepted", payload, false, 0); err != nil {
+			log.Fatal(err)
 		}
-		tcp := listeners.NewTCP(listeners.Config{
-			ID:        "t1",
-			Address:   ":8883",
-			TLSConfig: tlsConfig,
-		})
+	}); err != nil {
+		log.Fatal(err)
+	}
 
-		server := mqtt.New(&mqtt.Options{
-			InlineClient: true, // you must enable inline client to use direct publishing and subscribing.
-		})
+	if err := server.Subscribe("$aws/provisioning-templates/wallctrl_provision_template/provision/cbor", 2, func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
+		server.Log.Info("wallctrl message", "client", cl.ID, "subscriptionId", sub.Identifier, "topic", pk.TopicName, "payload", string(pk.Payload))
 
-		level := new(slog.LevelVar)
-		server.Log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: level,
-		}))
-		level.Set(slog.LevelInfo)
-
-		mLogger := &MQTTLogger{
-			server:            server,
-			savedReqsDir:      *savedReqsDir,
-			iotMQTTClient:     awsIOTMQTTClient,
-			clientID:          *clientID,
-			thingNameOverride: *thingNameOverride,
-			subscribedTopics:  make(map[string]struct{}),
-			loadedValues:      loadedValues,
-			liveClients:       make(map[string]struct{}),
-		}
-
-		if err := server.AddHook(mLogger, nil); err != nil {
+		var registerThingReq RegisterThingReq
+		if err := cbor.Unmarshal(pk.Payload, &registerThingReq); err != nil {
 			log.Fatal(err)
 		}
 
-		err = server.AddListener(tcp)
+		log.Printf("Registering with %+v", registerThingReq)
+
+		registerThing := &RegisterThingResp{
+			ThingName:           cl.ID,
+			DeviceConfiguration: registerThingReq.Parameters,
+		}
+
+		payload, err := cbor.Marshal(registerThing)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		err = server.AddHook(new(auth.AllowHook), nil)
+		if err := server.Publish("$aws/provisioning-templates/wallctrl_provision_template/provision/cbor/accepted", payload, false, 0); err != nil {
+			log.Fatal(err)
+		}
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	publishProto := func(cs []*carrier.ConfigSetting) {
+		msg := &carrier.CarrierInfo{
+			TimestampMillis: time.Now().UnixMilli(),
+			ConfigSettings:  cs,
+			Uuid:            uuid.New().String(),
+		}
+		msgEncoded, err := proto.Marshal(msg)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Failed to encode proto: %s", err)
+			return
 		}
-
-		shutdownFuncLock.Lock()
-		shutdownFuncs = append(shutdownFuncs, func() {
-			log.Println("Shutting down MQTT")
-			server.Close()
-		})
-		shutdownFuncLock.Unlock()
-
-		if err = server.Serve(); err != nil {
-			log.Fatal(err)
+		if err := server.Publish(cmdTopic, msgEncoded, false, 0); err != nil {
+			log.Printf("Failed to send command NCMD: %s", err)
 		}
+	}
 
-		clientCert, err := os.ReadFile("tls/client/cert.pem")
-		if err != nil {
-			log.Fatal(err)
-		}
+	loadedValues.OnChange1("weather_request", func(tv TimestampedValue) {
+		now := time.Now()
+		ts := now.UnixMilli()
 
-		clientKey, err := os.ReadFile("tls/client/key.pem")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		if err := server.Subscribe("$aws/certificates/create/cbor", 1, func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
-			server.Log.Info("inline client received message from subscription", "client", cl.ID, "subscriptionId", sub.Identifier, "topic", pk.TopicName, "payload", string(pk.Payload))
-
-			certAndKey := &CertificateAndKeyResponse{
-				CertificateId:             "foo",
-				CertificateOwnershipToken: "hello",
-				CertificatePem:            string(clientCert),
-				PrivateKey:                string(clientKey),
-			}
-
-			payload, err := cbor.Marshal(certAndKey)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			if err := server.Publish("$aws/certificates/create/cbor/accepted", payload, false, 0); err != nil {
-				log.Fatal(err)
-			}
-		}); err != nil {
-			log.Fatal(err)
-		}
-
-		if err := server.Subscribe("$aws/provisioning-templates/wallctrl_provision_template/provision/cbor", 2, func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
-			server.Log.Info("wallctrl message", "client", cl.ID, "subscriptionId", sub.Identifier, "topic", pk.TopicName, "payload", string(pk.Payload))
-
-			var registerThingReq RegisterThingReq
-			if err := cbor.Unmarshal(pk.Payload, &registerThingReq); err != nil {
-				log.Fatal(err)
-			}
-
-			log.Printf("Registering with %+v", registerThingReq)
-
-			registerThing := &RegisterThingResp{
-				ThingName:           cl.ID,
-				DeviceConfiguration: registerThingReq.Parameters,
-			}
-
-			payload, err := cbor.Marshal(registerThing)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			if err := server.Publish("$aws/provisioning-templates/wallctrl_provision_template/provision/cbor/accepted", payload, false, 0); err != nil {
-				log.Fatal(err)
-			}
-		}); err != nil {
-			log.Fatal(err)
-		}
-
-		publishProto := func(cs []*carrier.ConfigSetting) {
-			msg := &carrier.CarrierInfo{
-				TimestampMillis: time.Now().UnixMilli(),
-				ConfigSettings:  cs,
-				Uuid:            uuid.New().String(),
-			}
-			msgEncoded, err := proto.Marshal(msg)
-			if err != nil {
-				log.Printf("Failed to encode proto: %s", err)
-				return
-			}
-			if err := server.Publish(cmdTopic, msgEncoded, false, 0); err != nil {
-				log.Printf("Failed to send command NCMD: %s", err)
-			}
-		}
-
-		loadedValues.OnChange1("weather_request", func(tv TimestampedValue) {
-			log.Println("Responding to weather request")
-			now := time.Now()
-			ts := now.UnixMilli()
-
-			entries := []*carrier.ConfigSetting{
-				{
-					Name:            "temp_units",
-					ConfigType:      carrier.ConfigType_CT_STRING,
-					TimestampMillis: ts,
-					Value: &carrier.ConfigSetting_MaybeStrValue{
-						MaybeStrValue: []byte("C"),
-					},
+		entries := []*carrier.ConfigSetting{
+			{
+				Name:            "temp_units",
+				ConfigType:      carrier.ConfigType_CT_STRING,
+				TimestampMillis: ts,
+				Value: &carrier.ConfigSetting_MaybeStrValue{
+					MaybeStrValue: []byte("C"),
 				},
+			},
+			{
+				Name:            "ping",
+				ConfigType:      carrier.ConfigType_CT_INT32,
+				TimestampMillis: ts,
+				Value: &carrier.ConfigSetting_IntValue{
+					IntValue: 60,
+				},
+			},
+			{
+				Name:            "timestamp",
+				ConfigType:      carrier.ConfigType_CT_STRING,
+				TimestampMillis: ts,
+				Value: &carrier.ConfigSetting_MaybeStrValue{
+					MaybeStrValue: []byte(now.UTC().Format("2006-01-02T15:04:05.000Z")),
+				},
+			},
+		}
+
+		for i := 0; i <= 5; i++ {
+			entries = append(entries, []*carrier.ConfigSetting{
 				{
-					Name:            "ping",
-					ConfigType:      carrier.ConfigType_CT_INT32,
+					Name:            fmt.Sprintf("%d/pop", i),
+					ConfigType:      carrier.ConfigType_CT_UINT16,
 					TimestampMillis: ts,
 					Value: &carrier.ConfigSetting_IntValue{
-						IntValue: 60,
+						IntValue: 0,
 					},
 				},
 				{
-					Name:            "timestamp",
-					ConfigType:      carrier.ConfigType_CT_STRING,
+					// 1  -> thunderstorms
+					// 2  -> sleet
+					// 3  -> rain and sleet
+					// 4  -> wintry mix
+					// 5  -> rain and snow
+					// 6  -> snow
+					// 7  -> freezing rain
+					// 8  -> rain
+					// 9  -> blizzard
+					// 10 -> fog
+					// 11 -> cloudy
+					// 12 -> partly cloudy
+					// 13 -> mostly cloudy
+					// 14 -> clear
+					Name:            fmt.Sprintf("%d/status_id", i),
+					ConfigType:      carrier.ConfigType_CT_UINT16,
 					TimestampMillis: ts,
-					Value: &carrier.ConfigSetting_MaybeStrValue{
-						MaybeStrValue: []byte(now.UTC().Format("2006-01-02T15:04:05.000Z")),
+					Value: &carrier.ConfigSetting_IntValue{
+						IntValue: 14,
 					},
 				},
-			}
-
-			for i := 0; i <= 5; i++ {
-				entries = append(entries, []*carrier.ConfigSetting{
-					{
-						Name:            fmt.Sprintf("%d/pop", i),
-						ConfigType:      carrier.ConfigType_CT_UINT16,
-						TimestampMillis: ts,
-						Value: &carrier.ConfigSetting_IntValue{
-							IntValue: 0,
-						},
-					},
-					{
-						// 1  -> thunderstorms
-						// 2  -> sleet
-						// 3  -> rain and sleet
-						// 4  -> wintry mix
-						// 5  -> rain and snow
-						// 6  -> snow
-						// 7  -> freezing rain
-						// 8  -> rain
-						// 9  -> blizzard
-						// 10 -> fog
-						// 11 -> cloudy
-						// 12 -> partly cloudy
-						// 13 -> mostly cloudy
-						// 14 -> clear
-						Name:            fmt.Sprintf("%d/status_id", i),
-						ConfigType:      carrier.ConfigType_CT_UINT16,
-						TimestampMillis: ts,
-						Value: &carrier.ConfigSetting_IntValue{
-							IntValue: 14,
-						},
-					},
-					{
-						Name:            fmt.Sprintf("%d/max_temp", i),
-						ConfigType:      carrier.ConfigType_CT_TEMP,
-						TimestampMillis: ts,
-						Value: &carrier.ConfigSetting_IntValue{
-							IntValue: 23,
-						},
-					},
-					{
-						Name:            fmt.Sprintf("%d/min_temp", i),
-						ConfigType:      carrier.ConfigType_CT_TEMP,
-						TimestampMillis: ts,
-						Value: &carrier.ConfigSetting_IntValue{
-							IntValue: 12,
-						},
-					},
-				}...)
-			}
-
-			publishProto([]*carrier.ConfigSetting{
 				{
-					Name:       "weather_forecast",
-					ConfigType: carrier.ConfigType_CT_STRUCT,
-					Details: []*carrier.Detail{
-						{
-							Entries: entries,
-							Zero:    0,
-						},
+					Name:            fmt.Sprintf("%d/max_temp", i),
+					ConfigType:      carrier.ConfigType_CT_TEMP,
+					TimestampMillis: ts,
+					Value: &carrier.ConfigSetting_IntValue{
+						IntValue: 23,
 					},
 				},
-			})
+				{
+					Name:            fmt.Sprintf("%d/min_temp", i),
+					ConfigType:      carrier.ConfigType_CT_TEMP,
+					TimestampMillis: ts,
+					Value: &carrier.ConfigSetting_IntValue{
+						IntValue: 12,
+					},
+				},
+			}...)
+		}
+
+		publishProto([]*carrier.ConfigSetting{
+			{
+				Name:       "weather_forecast",
+				ConfigType: carrier.ConfigType_CT_STRUCT,
+				Details: []*carrier.Detail{
+					{
+						Entries: entries,
+						Zero:    0,
+					},
+				},
+			},
 		})
+	})
 
-		haMQTT := NewHAMQTT(*haMQTTAddr, *haMQTTTopicPrefix, loadedValues, publishProto)
-		go haMQTT.Run()
+	haMQTT := NewHAMQTT(*haMQTTAddr, *haMQTTTopicPrefix, loadedValues, publishProto)
+	go haMQTT.Run()
 
+	go func() {
 		if awsIOTMQTTClient == nil {
 			// If we're not proxying to AWS IOT, poll every minute
 			for range time.Tick(time.Minute) {

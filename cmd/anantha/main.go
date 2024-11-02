@@ -631,62 +631,64 @@ func main() {
 		log.Printf("Connected to mqtt.res.carrier.io")
 	}
 
-	go func() {
-		dirents, err := os.ReadDir(*savedReqsDir)
+	if err := os.MkdirAll(*savedReqsDir, 0755); err != nil {
+		log.Fatalf("Failed to create proto dump directory: %s", err)
+	}
+
+	dirents, err := os.ReadDir(*savedReqsDir)
+	if err != nil {
+		log.Fatalf("Failed to list directory: %s", err)
+	}
+
+	files := []string{}
+
+	for _, dirent := range dirents {
+		if dirent.IsDir() {
+			continue
+		}
+		if !strings.HasPrefix(dirent.Name(), "spBv1.0") {
+			continue
+		}
+		if strings.Contains(dirent.Name(), "NCMD") || strings.Contains(dirent.Name(), "DCMD") {
+			continue
+		}
+
+		files = append(files, dirent.Name())
+	}
+
+	extractTS := func(fName string) time.Time {
+		timePlusExt := strings.SplitAfterN(fName, "-", 2)[1]
+		t, _ := time.Parse(time.RFC3339, timePlusExt[:len(timePlusExt)-3])
+		return t
+	}
+
+	sort.SliceStable(files, func(i, j int) bool {
+		return extractTS(files[i]).After(extractTS(files[j]))
+	})
+
+	for _, f := range files {
+		// log.Printf("Loading %s\n", f)
+
+		b, err := os.ReadFile(path.Join(*savedReqsDir, f))
 		if err != nil {
-			log.Fatalf("Failed to list directory: %s", err)
+			log.Fatalf("Unable to read file %s: %s", f, err)
 		}
 
-		files := []string{}
-
-		for _, dirent := range dirents {
-			if dirent.IsDir() {
-				continue
-			}
-			if !strings.HasPrefix(dirent.Name(), "spBv1.0") {
-				continue
-			}
-			if strings.Contains(dirent.Name(), "NCMD") || strings.Contains(dirent.Name(), "DCMD") {
-				continue
-			}
-
-			files = append(files, dirent.Name())
+		var cInfo carrier.CarrierInfo
+		if err := proto.Unmarshal(b, &cInfo); err != nil {
+			log.Printf("Unable to unmarshal %s: %s", f, err)
+			return
 		}
 
-		extractTS := func(fName string) time.Time {
-			timePlusExt := strings.SplitAfterN(fName, "-", 2)[1]
-			t, _ := time.Parse(time.RFC3339, timePlusExt[:len(timePlusExt)-3])
-			return t
-		}
-
-		sort.SliceStable(files, func(i, j int) bool {
-			return extractTS(files[i]).After(extractTS(files[j]))
-		})
-
-		for _, f := range files {
-			log.Printf("Loading %s\n", f)
-
-			b, err := os.ReadFile(path.Join(*savedReqsDir, f))
-			if err != nil {
-				log.Fatalf("Unable to read file %s: %s", f, err)
-			}
-
-			var cInfo carrier.CarrierInfo
-			if err := proto.Unmarshal(b, &cInfo); err != nil {
-				log.Printf("Unable to unmarshal %s: %s", f, err)
-				return
-			}
-
-			if updated := addAllConfigSettings(&cInfo, loadedValues); updated <= 0 {
-				log.Printf("File %s had no new records - deleting", f)
-				if err := os.Remove(path.Join(*savedReqsDir, f)); err != nil {
-					log.Fatalf("Unable to remove file %s: %s", f, err)
-				}
+		if updated := addAllConfigSettings(&cInfo, loadedValues); updated <= 0 {
+			log.Printf("File %s had no new records - deleting", f)
+			if err := os.Remove(path.Join(*savedReqsDir, f)); err != nil {
+				log.Fatalf("Unable to remove file %s: %s", f, err)
 			}
 		}
+	}
 
-		log.Println("Done loading all protos")
-	}()
+	log.Println("Done loading all proto messages")
 
 	go func() {
 		if err := dnsServer.ListenAndServe(); err != nil {

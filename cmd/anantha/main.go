@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	carrier "github.com/anupcshan/anantha/pb"
+	"github.com/anupcshan/anantha/tls/server"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/google/uuid"
 	"github.com/miekg/dns"
@@ -695,8 +696,27 @@ func main() {
 		}
 	}()
 
+	cert, err := tls.X509KeyPair(server.Bundle, server.Key)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	go func() {
-		if err := http.ListenAndServeTLS(":443", "tls/server/cert-bundle.pem", "tls/server/key.pem", carrierHTTPMux); err != nil {
+		ln, err := net.Listen("tcp", ":443")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		defer ln.Close()
+
+		httpServer := &http.Server{
+			Addr:    ":443",
+			Handler: carrierHTTPMux,
+			TLSConfig: &tls.Config{
+				Certificates: []tls.Certificate{cert},
+			},
+		}
+		if err := httpServer.ServeTLS(ln, "", ""); err != nil {
 			log.Fatal(err)
 		}
 	}()
@@ -785,10 +805,6 @@ func main() {
 		}
 	}()
 
-	cert, err := tls.LoadX509KeyPair("tls/server/cert-bundle.pem", "tls/server/key.pem")
-	if err != nil {
-		log.Fatal(err)
-	}
 	tlsConfig := &tls.Config{
 		GetCertificate: func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			log.Printf("GetCertificate for %s", chi.ServerName)
@@ -850,17 +866,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	clientCert, err := os.ReadFile("tls/client/cert.pem")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	clientKey, err := os.ReadFile("tls/client/key.pem")
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	if err := server.Subscribe("$aws/certificates/create/cbor", 1, func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
+		clientCert, err := os.ReadFile("tls/client/cert.pem")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		clientKey, err := os.ReadFile("tls/client/key.pem")
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		server.Log.Info("inline client received message from subscription", "client", cl.ID, "subscriptionId", sub.Identifier, "topic", pk.TopicName, "payload", string(pk.Payload))
 
 		certAndKey := &CertificateAndKeyResponse{

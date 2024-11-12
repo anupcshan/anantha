@@ -289,6 +289,10 @@ type TimestampedValue struct {
 }
 
 func (t TimestampedValue) ToString() string {
+	if t.value == nil {
+		return "unknown"
+	}
+
 	// For known keys, include units and format it nicely
 	switch t.value.Name {
 	case "sensor/wallControl/rh":

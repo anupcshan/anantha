@@ -137,7 +137,7 @@ type MQTTLogger struct {
 	mqtt.HookBase
 
 	server            *mqtt.Server
-	savedReqsDir      string
+	savedProtosDir    string
 	iotMQTTClient     mqtt_paho.Client
 	clientID          string
 	thingNameOverride string
@@ -193,7 +193,7 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 		if err := os.WriteFile(
 			fmt.Sprintf(
 				"%s/%s-%s.pb",
-				m.savedReqsDir,
+				m.savedProtosDir,
 				strings.ReplaceAll(string(pk.TopicName), "/", "_"),
 				time.Now().Format(time.RFC3339Nano),
 			),
@@ -241,7 +241,7 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 					if err := os.WriteFile(
 						fmt.Sprintf(
 							"%s/%s-%s.pb",
-							m.savedReqsDir,
+							m.savedProtosDir,
 							strings.ReplaceAll(iotTopic, "/", "_"),
 							time.Now().Format(time.RFC3339Nano),
 						),
@@ -473,7 +473,7 @@ func main() {
 	ntpAddrStr := flag.String("ntp-addr", "", "NTP IPv4 Address")
 	haMQTTAddr := flag.String("ha-mqtt-addr", "", "Home Assistant MQTT Host")
 	haMQTTTopicPrefix := flag.String("ha-mqtt-topic-prefix", "", "Home Assistant MQTT Topic Prefix")
-	savedReqsDir := flag.String("reqs-dir", "dump", "Directory where request protos are stored")
+	protosDir := flag.String("reqs-dir", "$HOME/.anantha/protos", "Directory where request protos are stored")
 	clientID := flag.String("client-id", "hello", "MQTT Client ID")
 	thingNameOverride := flag.String("thing-name-override", "", "Thingname override - you should never need to set this")
 	proxyToAWSIOT := flag.Bool("proxy", false, "Proxy requests to AWS IOT - requires a valid client certificate for now")
@@ -635,11 +635,12 @@ func main() {
 		log.Printf("Connected to mqtt.res.carrier.io")
 	}
 
-	if err := os.MkdirAll(*savedReqsDir, 0755); err != nil {
+	savedProtosDir := os.ExpandEnv(*protosDir)
+	if err := os.MkdirAll(savedProtosDir, 0755); err != nil {
 		log.Fatalf("Failed to create proto dump directory: %s", err)
 	}
 
-	dirents, err := os.ReadDir(*savedReqsDir)
+	dirents, err := os.ReadDir(savedProtosDir)
 	if err != nil {
 		log.Fatalf("Failed to list directory: %s", err)
 	}
@@ -673,7 +674,7 @@ func main() {
 	for _, f := range files {
 		// log.Printf("Loading %s\n", f)
 
-		b, err := os.ReadFile(path.Join(*savedReqsDir, f))
+		b, err := os.ReadFile(path.Join(savedProtosDir, f))
 		if err != nil {
 			log.Fatalf("Unable to read file %s: %s", f, err)
 		}
@@ -686,7 +687,7 @@ func main() {
 
 		if updated := addAllConfigSettings(&cInfo, loadedValues); updated <= 0 {
 			log.Printf("File %s had no new records - deleting", f)
-			if err := os.Remove(path.Join(*savedReqsDir, f)); err != nil {
+			if err := os.Remove(path.Join(savedProtosDir, f)); err != nil {
 				log.Fatalf("Unable to remove file %s: %s", f, err)
 			}
 		}
@@ -838,7 +839,7 @@ func main() {
 
 	mLogger := &MQTTLogger{
 		server:            server,
-		savedReqsDir:      *savedReqsDir,
+		savedProtosDir:    savedProtosDir,
 		iotMQTTClient:     awsIOTMQTTClient,
 		clientID:          *clientID,
 		thingNameOverride: *thingNameOverride,

@@ -729,6 +729,7 @@ func main() {
 	go func() {
 		webControlMux := http.NewServeMux()
 
+		webControlMux.Handle("/metrics", MetricsHandler(loadedValues))
 		webControlMux.Handle("/assets/", http.FileServer(http.FS(assets)))
 		webControlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, indexTmpl)

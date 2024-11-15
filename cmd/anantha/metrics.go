@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -117,6 +118,16 @@ func MetricsHandler(loadedValues *LoadedValues) http.Handler {
 		zoneHumidityGauge.WithLabelValues("1").Set(float64(rh.value.GetFloatValue()))
 	})
 	prometheus.MustRegister(zoneHumidityGauge)
+
+	lastMessageReceievedTimestampGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "anantha",
+		Name:      "last_msg_rcvd_timestamp_seconds",
+		Help:      "Last message received from HVAC (unix time in seconds)",
+	})
+	loadedValues.OnAnyChange(func(timestamp time.Time) {
+		lastMessageReceievedTimestampGauge.Set(float64(timestamp.Unix()))
+	})
+	prometheus.MustRegister(lastMessageReceievedTimestampGauge)
 
 	return promhttp.Handler()
 }

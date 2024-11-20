@@ -20,9 +20,8 @@ type UpdateConfig struct {
 }
 
 type replaceConfig struct {
-	nextByte   int
-	str        []byte
-	stuffChars []byte
+	nextByte int
+	str      []byte
 }
 
 func (r *replaceConfig) Emit() byte {
@@ -34,21 +33,6 @@ func (r *replaceConfig) Emit() byte {
 	r.nextByte++
 
 	return b
-}
-
-func (r *replaceConfig) Rollback() int {
-	if r.nextByte == 0 {
-		return 0
-	}
-
-	if len(r.stuffChars) == 0 {
-		n := r.nextByte
-		r.nextByte = 0
-		return n
-	}
-
-	r.nextByte--
-	return 1
 }
 
 func (r *replaceConfig) IsComplete() bool {
@@ -85,28 +69,6 @@ func (s *sequentialReplacement) IsComplete() bool {
 		return true
 	}
 	return s.replacements[s.currentIndex].IsComplete()
-}
-
-func (s *sequentialReplacement) Rollback() int {
-	if s.currentIndex >= len(s.replacements) {
-		s.currentIndex--
-	}
-
-	for {
-		rolledBack := s.replacements[s.currentIndex].Rollback()
-		if rolledBack > 0 {
-			return rolledBack
-		}
-
-		if s.currentIndex == 0 {
-			panic("Can't rollback past beginning of first replacement")
-		}
-		s.currentIndex--
-	}
-}
-
-func (s *sequentialReplacement) StuffChars() []byte {
-	return s.replacements[s.currentIndex].stuffChars
 }
 
 type updateT struct {
@@ -180,38 +142,9 @@ func max(a, b int64) int64 {
 	return b
 }
 
-func permuteByte(buf []byte, modifyRange []byte, targetChecksum uint8, spaces int, stuffChars []byte) bool {
-	// log.Printf("Permuting with len(buf)=%d, len(modifyRange)=%d, spaces=%d", len(buf), len(modifyRange), spaces)
-	index := len(modifyRange) - spaces
-	for _, opt := range stuffChars {
-		modifyRange[index] = opt
-		if index == len(modifyRange)-1 {
-			updatedChecksum := checksum(buf)
-			// log.Printf("Checksum %x: %x vs %x", opt, targetChecksum, updatedChecksum)
-
-			if targetChecksum == updatedChecksum {
-				return true
-			}
-		} else {
-			if permuteByte(buf, modifyRange, targetChecksum, spaces-1, stuffChars) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 func updateWithPermutations(buf []byte, modifyRange []byte, targetChecksum uint8, update *updateT) error {
-	// First, clear the entire range
-	for i := 0; i < len(modifyRange); i++ {
-		modifyRange[i] = 0
-	}
-
-	spaces := len(modifyRange)
 	for i := 0; !update.sRepl.IsComplete() && i < len(modifyRange); i++ {
 		modifyRange[i] = update.sRepl.Emit()
-		spaces--
 	}
 
 	// log.Printf("%x vs %x", checksum(buf), targetChecksum)
@@ -219,58 +152,24 @@ func updateWithPermutations(buf []byte, modifyRange []byte, targetChecksum uint8
 		return nil
 	}
 
-	var first bool
-	for checksum(buf) != targetChecksum {
-		if !first || spaces == 0 {
-			spaces += update.sRepl.Rollback()
-			log.Printf("Rolled back %d", spaces)
-		}
-		first = false
-
-		if permuteByte(buf, modifyRange, targetChecksum, spaces, update.sRepl.StuffChars()) {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("couldn't find a valid permutation that matches specs")
+	return fmt.Errorf("Checksum mismatch: %x vs %x", checksum(buf), targetChecksum)
 }
 
 func (m *memBuffer) ReadAt(p []byte, off int64) (int, error) {
 	// log.Printf("Reading %d at offset %d", len(p), off)
 	var pickBuffer *offsetBuffer
-	var nextBufIndex int
-	for idx, buf := range m.buffers {
+	for _, buf := range m.buffers {
 		if off >= buf.offset {
 			if off < buf.offset+int64(len(buf.buf)) {
 				pickBuffer = buf
 			}
 		} else {
-			nextBufIndex = idx
 			break
 		}
 	}
 
 	if pickBuffer == nil {
-		maxZeroes := m.buffers[nextBufIndex].offset - off
-		if maxZeroes < 0 {
-			return 0, fmt.Errorf("Bad state, reading at offset %d for len %d with first buf offset %d and len %d", off, len(p), m.buffers[nextBufIndex].offset, len(m.buffers[nextBufIndex].buf))
-		}
-		if maxZeroes >= int64(len(p)) {
-			maxZeroes = int64(len(p))
-		}
-
-		for i := 0; i < int(maxZeroes); i++ {
-			p[i] = 0
-		}
-
-		// log.Printf("Returning %d zeroes", maxZeroes)
-
-		if int(maxZeroes) < len(p) {
-			more, err := m.ReadAt(p[maxZeroes:], off+maxZeroes)
-			return more + int(maxZeroes), err
-		} else {
-			return int(maxZeroes), nil
-		}
+		return 0, fmt.Errorf("No pickbuffer")
 	}
 
 	blob := pickBuffer.buf

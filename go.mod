@@ -5,6 +5,7 @@ go 1.21
 toolchain go1.22.0
 
 require (
+	github.com/bits-and-blooms/bitset v1.17.0
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/google/uuid v1.6.0

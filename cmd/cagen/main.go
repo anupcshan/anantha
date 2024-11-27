@@ -15,20 +15,20 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"math/big"
 	"os"
 	"runtime"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"net/http"
 	_ "net/http/pprof"
 
 	"github.com/anupcshan/anantha/certs"
+	"github.com/bits-and-blooms/bitset"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
@@ -45,11 +45,14 @@ type Result struct {
 	fName string
 
 	FoundCerts map[int]certs.Cert
+	fslSets    []*bitset.BitSet
+	fslCerts   []map[int]certs.Cert
 	stats      struct {
 		completedLens        int32
 		checkedKeys          int64
 		skippedKeys          int64
 		matches              int32
+		certsWithFSLMatch    [SliceLen]int64
 		matchesForLens       [SliceLen]int32
 		checksForLens        [SliceLen]int64
 		numSlicesNotMatched  [MaxSlices]int64
@@ -60,7 +63,10 @@ type Result struct {
 func (r *Result) AddCert(firstSliceLen int, private []byte, publicMangled []byte, public []byte) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+	return r.AddCertLocked(firstSliceLen, private, publicMangled, public)
+}
 
+func (r *Result) AddCertLocked(firstSliceLen int, private []byte, publicMangled []byte, public []byte) error {
 	atomic.AddInt32(&r.stats.matchesForLens[firstSliceLen], 1)
 	atomic.AddInt32(&r.stats.matches, 1)
 	if _, ok := r.FoundCerts[firstSliceLen]; ok {
@@ -97,6 +103,58 @@ func (r *Result) Found(firstSliceLen int) bool {
 
 	_, ok := r.FoundCerts[firstSliceLen]
 	return ok
+}
+
+type Set map[int]struct{}
+
+func NewSet() Set {
+	return make(map[int]struct{}, 128)
+}
+
+func NewRange(start, end int) Set {
+	x := NewSet()
+	for i := start; i <= end; i++ {
+		x.Add(i)
+	}
+
+	return x
+}
+
+func (s Set) Add(x int) {
+	s[x] = struct{}{}
+}
+
+func (s Set) Len() int {
+	return len(s)
+}
+
+func (s Set) AsSlice() []int {
+	values := make([]int, 0, len(s))
+
+	for k := range s {
+		values = append(values, k)
+	}
+
+	sort.Ints(values)
+
+	return values
+}
+
+func (s Set) Minus(other Set) Set {
+	x := NewSet()
+	for k := range s {
+		if _, ok := other[k]; !ok {
+			x.Add(k)
+		}
+	}
+
+	return x
+}
+
+func (s Set) AddAll(other Set) {
+	for k := range other {
+		s[k] = struct{}{}
+	}
 }
 
 func writeResult(fName string, result *Result) error {
@@ -273,18 +331,18 @@ var (
 			CertFile:   "Starfield.pem",
 			ResultFile: "result-Starfield.json",
 			GenerateKey: func() (Key, error) {
-				caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
-				if err != nil {
-					return nil, err
-				}
-				return RSAPrivateKey{key: caPrivKey}, nil
-				// caPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+				// caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
 				// if err != nil {
 				// 	return nil, err
 				// }
-				// return ECDSAPrivateKey{key: caPrivKey}, nil
+				// return RSAPrivateKey{key: caPrivKey}, nil
+				caPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+				if err != nil {
+					return nil, err
+				}
+				return ECDSAPrivateKey{key: caPrivKey}, nil
 			},
-			// SignatureAlgorithm: x509.ECDSAWithSHA256,
+			SignatureAlgorithm: x509.ECDSAWithSHA256,
 			StuffExtraExtensions: func() []pkix.Extension {
 				return nil
 			},
@@ -293,13 +351,18 @@ var (
 			CertFile:   "Verisign.pem",
 			ResultFile: "result-Verisign.json",
 			GenerateKey: func() (Key, error) {
-				caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+				// caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+				// if err != nil {
+				// 	return nil, err
+				// }
+				// return RSAPrivateKey{key: caPrivKey}, nil
+				caPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 				if err != nil {
 					return nil, err
 				}
-				return RSAPrivateKey{key: caPrivKey}, nil
+				return ECDSAPrivateKey{key: caPrivKey}, nil
 			},
-			// SignatureAlgorithm: x509.ECDSAWithSHA256,
+			SignatureAlgorithm: x509.ECDSAWithSHA256,
 			StuffExtraExtensions: func() []pkix.Extension {
 				return nil
 			},
@@ -358,90 +421,32 @@ func main() {
 	}
 
 	go func() {
-		startTime := time.Now()
-		tick := time.NewTicker(time.Second)
-		for range tick.C {
-			since := time.Since(startTime)
-			keySlice := missingKeys()
-
-			checkedKeys := float64(atomic.LoadInt64(&result.stats.checkedKeys))
-
-			var lensNotMatched string
-			var fastestMinutes float64 = math.MaxFloat64
-			var exponent float64 = 1
-			for i := 0; i < MaxSlices; i++ {
-				if i > 0 {
-					exponent *= 256
-				}
-				matched := atomic.LoadInt64(&result.stats.numSlicesNotMatched[i])
-				if matched > 0 {
-					if i > 0 {
-						rate := since.Minutes() / (float64(matched) / exponent)
-						if rate < fastestMinutes {
-							fastestMinutes = rate
-						}
-					}
-					partial := fmt.Sprintf("%d:%d", i, matched)
-					if len(lensNotMatched) > 0 {
-						lensNotMatched = lensNotMatched + " " + partial
-					} else {
-						lensNotMatched = partial
-					}
-				}
-			}
-
-			lensNotMatched = fmt.Sprintf("%s fst: %s", lensNotMatched, humanizeDuration(fastestMinutes))
-
-			var firstMismatchedSlice string
-			for i := 0; i < MaxSlices; i++ {
-				matched := atomic.LoadInt64(&result.stats.firstMismatchedSlice[i])
-				if matched > 0 {
-					partial := fmt.Sprintf("%d:%.2f", i, float64(matched)/checkedKeys)
-					if len(firstMismatchedSlice) > 0 {
-						firstMismatchedSlice = firstMismatchedSlice + " " + partial
-					} else {
-						firstMismatchedSlice = partial
-					}
-				}
-			}
-
-			// var slicesChecked string
-			// for i := 0; i < SliceLen; i++ {
-			// 	checked := atomic.LoadInt64(&result.stats.checksForLens[i])
-			// 	if checked > 0 {
-			// 		partial := fmt.Sprintf("%d:%d", i, checked)
-			// 		if len(slicesChecked) > 0 {
-			// 			slicesChecked = slicesChecked + " " + partial
-			// 		} else {
-			// 			slicesChecked = partial
-			// 		}
-			// 	}
-			// }
-
-			fmt.Printf(
-				"\r%.2f/s (%.2f skip/s) [%d/%d lens] [%.2f certs/min] Partial mismatches: [%s] First mismatched: [%s] Missing lens: %s     ",
-				checkedKeys/since.Seconds(),
-				float64(atomic.LoadInt64(&result.stats.skippedKeys))/since.Seconds(),
-				atomic.LoadInt32(&result.stats.completedLens),
-				SliceLen,
-				float64(atomic.LoadInt32(&result.stats.matches))/since.Minutes(),
-				lensNotMatched,
-				firstMismatchedSlice,
-				humanizeRange(keySlice),
-			)
-		}
-	}()
-
-	go func() {
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			keySlice := missingKeys()
 			w.WriteHeader(http.StatusOK)
+			result.lock.RLock()
+			count := len(result.fslSets)
+			var copied [SliceLen]int64
+			for i := 0; i < SliceLen; i++ {
+				copied[i] = result.stats.certsWithFSLMatch[i]
+			}
+			result.lock.RUnlock()
+			var sb strings.Builder
+			var found int
+			for i := SliceLen - 1; i >= 0 && found < 20; i-- {
+				if copied[i] > 0 {
+					fmt.Fprintf(&sb, "[%d]->%d ", i, copied[i])
+					found++
+				}
+			}
 			fmt.Fprintf(
 				w,
-				"[%d/%d lens] Missing lens: %s",
+				"[%d/%d lens] Missing lens: %s, %d sets, topk: %s",
 				atomic.LoadInt32(&result.stats.completedLens),
 				SliceLen,
 				humanizeRange(keySlice),
+				count,
+				sb.String(),
 			)
 		})
 		log.Fatal(http.ListenAndServe(":6060", nil))
@@ -456,7 +461,7 @@ func main() {
 				default:
 				}
 
-				if result.FoundCount() == SliceLen {
+				if result.FoundCount() == SliceLen && false {
 					return nil
 				}
 
@@ -690,10 +695,16 @@ func certsetup(blob []byte, algo Algo, sliceLen int, result *Result, logger Logg
 		return nil
 	}
 
+	pk, _ := x509.MarshalPKCS8PrivateKey(genKey.GetPrivateKey())
+	pemEncoded := pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: pk,
+	})
+
+	fslMatched := bitset.New(SliceLen)
+	fslCerts := make(map[int]certs.Cert)
+
 	for firstSliceLen := 0; firstSliceLen < SliceLen; firstSliceLen++ {
-		if result.Found(firstSliceLen) {
-			continue
-		}
 		atomic.AddInt64(&result.stats.checkedKeys, 1)
 		atomic.AddInt64(&result.stats.checksForLens[firstSliceLen], 1)
 
@@ -713,23 +724,54 @@ func certsetup(blob []byte, algo Algo, sliceLen int, result *Result, logger Logg
 			continue
 		}
 		if !fixupStuffBytes(firstSliceLen, blob, newBlob, toStuff-stuffedInternalBytes, result) {
-			log.Println("Unable to fixup")
+			// log.Println("Unable to fixup")
 			continue
 		} else {
-			log.Printf("Fixed up for %d!", firstSliceLen)
+			// log.Printf("Fixed up for %d!", firstSliceLen)
 		}
 		fnms := firstNonMatchingSlice(firstSliceLen, blob, newBlob, result)
 		if fnms == -1 {
-			pk, _ := x509.MarshalPKCS8PrivateKey(genKey.GetPrivateKey())
-			pemEncoded := pem.EncodeToMemory(&pem.Block{
-				Type:  "PRIVATE KEY",
-				Bytes: pk,
-			})
-
+			fslMatched.Set(uint(firstSliceLen))
+			fslCerts[firstSliceLen] = certs.Cert{
+				Public:        caPEM.Bytes(),
+				PublicMangled: newBlob,
+				Private:       pemEncoded,
+			}
 			if err := result.AddCert(firstSliceLen, pemEncoded, newBlob, caPEM.Bytes()); err != nil {
 				log.Fatal(err)
 			}
 		}
+	}
+
+	if fslMatched.Len() > 0 {
+		result.lock.Lock()
+		atomic.AddInt64(&result.stats.certsWithFSLMatch[fslMatched.Count()], 1)
+		result.fslSets = append(result.fslSets, fslMatched)
+		result.fslCerts = append(result.fslCerts, fslCerts)
+		if fslMatched.Count() >= SliceLen-10 {
+			log.Printf("Matched %d FSL [%d count]", fslMatched.Count(), len(result.fslSets))
+		}
+
+		j := len(result.fslSets) - 1
+		for i := 0; i < j; i++ {
+			ikCount := result.fslSets[i].UnionCardinality(result.fslSets[j])
+
+			if ikCount >= SliceLen {
+				result.FoundCerts = make(map[int]certs.Cert)
+				for firstSliceLen, cert := range result.fslCerts[i] {
+					if err := result.AddCertLocked(firstSliceLen, cert.Private, cert.PublicMangled, cert.Public); err != nil {
+						log.Fatal(err)
+					}
+				}
+				for firstSliceLen, cert := range result.fslCerts[j] {
+					if err := result.AddCertLocked(firstSliceLen, cert.Private, cert.PublicMangled, cert.Public); err != nil {
+						log.Fatal(err)
+					}
+				}
+				log.Fatalf("!!!!!! Len2: %d, i=%d [%d], j=%d [%d]", ikCount, i, result.fslSets[i].Count(), j, result.fslSets[j].Count())
+			}
+		}
+		result.lock.Unlock()
 	}
 
 	return nil
@@ -755,6 +797,7 @@ func verifyFixedBlobs(firstSliceLen int, blob []byte, newBlob []byte, stuffPrefi
 			end = len(blob)
 		}
 
+		// logger.Printf("Stuffed %d/%d bytes", stuffedInternalBytes, stuffPrefixBytes)
 		if start >= stuffPrefixBytes-stuffedInternalBytes {
 			var origChecksum, newChecksum uint8
 			for i := start; i < end; i++ {
@@ -762,29 +805,61 @@ func verifyFixedBlobs(firstSliceLen int, blob []byte, newBlob []byte, stuffPrefi
 				newChecksum += newBlob[i]
 			}
 
+			if origChecksum == newChecksum {
+				matches++
+				continue
+			}
+
 			var stuffedThisSlice int
+			var crs int
 
 			for {
-				if origChecksum == newChecksum {
-					matches++
-					break
-				} else if stuffedThisSlice >= end-start || stuffedThisSlice >= stuffPrefixBytes-stuffedInternalBytes {
-					// log.Printf("Unable to stuff this slice %d, prefix %d, internal %d", stuffedThisSlice, stuffPrefixBytes, stuffedInternalBytes)
-					atomic.AddInt64(&result.stats.numSlicesNotMatched[slices-matches], 1)
-					return 0, false
+				stuffedThisSlice++
+				var foundAMatch bool
+				for crs = 0; crs < stuffedThisSlice/2; crs++ {
+					updatedChecksum := newChecksum
+					for i := 0; i < stuffedThisSlice; i++ {
+						updatedChecksum -= newBlob[start+i]
+					}
+
+					for cr := 0; cr < crs; cr++ {
+						updatedChecksum += '\r'
+					}
+
+					for notcr := 0; notcr < stuffedThisSlice-crs; notcr++ {
+						updatedChecksum += '\n'
+					}
+
+					if origChecksum == updatedChecksum {
+						matches++
+						foundAMatch = true
+						break
+					} else if stuffedThisSlice >= end-start || stuffedThisSlice >= stuffPrefixBytes-stuffedInternalBytes {
+						// log.Printf("Unable to stuff this slice %d, prefix %d, internal %d", stuffedThisSlice, stuffPrefixBytes, stuffedInternalBytes)
+						atomic.AddInt64(&result.stats.numSlicesNotMatched[slices-matches], 1)
+						return 0, false
+					}
 				}
 
-				newChecksum -= newBlob[start+stuffedThisSlice]
-				newChecksum += '\n'
-				stuffedThisSlice++
+				if foundAMatch {
+					break
+				}
 			}
 
 			if stuffedThisSlice > 0 {
 				// log.Printf("Stuffed %d bytes (copied %d:%d from %d:) (prefix: %d, so far: %d) [%d,%d)", stuffedThisSlice, stuffPrefixBytes-stuffedInternalBytes-stuffedThisSlice, start+stuffedThisSlice, stuffPrefixBytes-stuffedInternalBytes, stuffPrefixBytes, stuffedInternalBytes, start, end)
 				copy(newBlob[stuffPrefixBytes-stuffedInternalBytes-stuffedThisSlice:start+stuffedThisSlice], newBlob[stuffPrefixBytes-stuffedInternalBytes:])
 
+				var isCr bool
 				for i := start; i < start+stuffedThisSlice; i++ {
-					newBlob[i] = '\n'
+					if isCr && crs > 0 {
+						newBlob[i] = '\r'
+						isCr = false
+						crs--
+					} else {
+						newBlob[i] = '\n'
+						isCr = true
+					}
 				}
 
 				stuffedInternalBytes += stuffedThisSlice
@@ -816,9 +891,9 @@ func fixupStuffBytes(firstSliceLen int, blob []byte, newBlob []byte, stuffPrefix
 			}
 
 			avg := deltaChecksum / bytesToStuff
-			log.Printf("Attempting to emit avg %x (%x/%d) for %d in range %d-%d", avg, deltaChecksum, bytesToStuff, firstSliceLen, start, stuffPrefixBytes)
+			// log.Printf("Attempting to emit avg %x (%x/%d) for %d in range %d-%d", avg, deltaChecksum, bytesToStuff, firstSliceLen, start, stuffPrefixBytes)
 			if avg > 255 {
-				log.Printf("Unable to emit avg %d (%d/%d) for %d", avg, deltaChecksum, bytesToStuff, firstSliceLen)
+				// log.Printf("Unable to emit avg %d (%d/%d) for %d", avg, deltaChecksum, bytesToStuff, firstSliceLen)
 				for i := start; i < stuffPrefixBytes-1; i++ {
 					newBlob[i] = 255
 					deltaChecksum -= 255
@@ -834,7 +909,7 @@ func fixupStuffBytes(firstSliceLen int, blob []byte, newBlob []byte, stuffPrefix
 					return false
 				}
 
-				log.Printf("Fixing up one slice earlier to emit avg %d (%d/%d) for %d", deltaChecksum/SliceLen, deltaChecksum, SliceLen, firstSliceLen)
+				// log.Printf("Fixing up one slice earlier to emit avg %d (%d/%d) for %d", deltaChecksum/SliceLen, deltaChecksum, SliceLen, firstSliceLen)
 
 				for i := start; i < end; i++ {
 					newBlob[i] += byte(deltaChecksum / SliceLen)
@@ -848,7 +923,7 @@ func fixupStuffBytes(firstSliceLen int, blob []byte, newBlob []byte, stuffPrefix
 			}
 
 			if deltaChecksum > 255 {
-				log.Printf("Unable to emit deltaChecksum %d for %d", deltaChecksum, firstSliceLen)
+				// log.Printf("Unable to emit deltaChecksum %d for %d", deltaChecksum, firstSliceLen)
 				return false
 			}
 			newBlob[stuffPrefixBytes-1] = byte(deltaChecksum)
@@ -900,7 +975,7 @@ func firstNonMatchingSlice(firstSliceLen int, blob []byte, newBlob []byte, resul
 	}
 
 	if firstMismatch == -1 && origSum != newSum {
-		log.Printf("Mismatch overall sum %x != %x (firstSliceLen %d)", origSum, newSum, firstSliceLen)
+		// log.Printf("Mismatch overall sum %x != %x (firstSliceLen %d)", origSum, newSum, firstSliceLen)
 		atomic.AddInt64(&result.stats.firstMismatchedSlice[MaxSlices-1], 1)
 		atomic.AddInt64(&result.stats.numSlicesNotMatched[slices-matches], 1)
 		return 0

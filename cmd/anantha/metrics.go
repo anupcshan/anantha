@@ -135,7 +135,7 @@ func MetricsHandler(loadedValues *LoadedValues) http.Handler {
 		Help:      "Wall Control Humidity percentage (0-100)",
 	})
 	loadedValues.OnChange1("sensor/wallControl/rh", func(rh TimestampedValue) {
-		wallCtrlHumidityGauge.Set(float64(rh.value.GetFloatValue()))
+		wallCtrlHumidityGauge.Set(float64(rh.value.GetAnotherIntValue()))
 	})
 	prometheus.MustRegister(wallCtrlHumidityGauge)
 

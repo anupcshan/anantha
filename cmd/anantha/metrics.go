@@ -119,6 +119,26 @@ func MetricsHandler(loadedValues *LoadedValues) http.Handler {
 	})
 	prometheus.MustRegister(zoneHumidityGauge)
 
+	wallCtrlTempGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "anantha",
+		Name:      "wall_ctrl_temp",
+		Help:      "Wall Control Temperature (in °F)",
+	})
+	loadedValues.OnChange1("sensor/wallControl/rt", func(rt TimestampedValue) {
+		wallCtrlTempGauge.Set(float64(rt.value.GetFloatValue()))
+	})
+	prometheus.MustRegister(wallCtrlTempGauge)
+
+	wallCtrlHumidityGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "anantha",
+		Name:      "wall_ctrl_humidity",
+		Help:      "Wall Control Humidity percentage (0-100)",
+	})
+	loadedValues.OnChange1("sensor/wallControl/rh", func(rh TimestampedValue) {
+		wallCtrlHumidityGauge.Set(float64(rh.value.GetFloatValue()))
+	})
+	prometheus.MustRegister(wallCtrlHumidityGauge)
+
 	lastMessageReceievedTimestampGauge := prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "anantha",
 		Name:      "last_msg_rcvd_timestamp_seconds",

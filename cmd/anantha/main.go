@@ -127,6 +127,23 @@ const (
 				<td sse-swap="dischargetmp">Pending</td>
 			</tr>
 		</table>
+
+		<br/>
+
+		<div><b>Versions</b></div><br/>
+
+		<table>
+			<tr>
+				<th>Firmware</th>
+				<th>IDU</th>
+				<th>ODU</th>
+			</tr>
+			<tr>
+				<td sse-swap="profile/firmware">Pending</td>
+				<td sse-swap="profile/iduversion">Pending</td>
+				<td sse-swap="profile/oduversion">Pending</td>
+			</tr>
+		</table>
 	</div>
 </body>
 </html>
@@ -810,6 +827,9 @@ func main() {
 					"oducoiltmp",
 					"sucttemp",
 					"dischargetmp",
+					"profile/firmware",
+					"profile/iduversion",
+					"profile/oduversion",
 				} {
 					ent := entries[k]
 					data[k] = ent.ToString()

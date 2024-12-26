@@ -1,5 +1,5 @@
 {
-	"searchBegin": "-----BEGIN CERTIFICATE-----\u000aMIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF",
+	"searchBegin": "-----BEGIN CERTIFICATE-----\u000aMIIE0zCCA7ugAwIBAgIQGNrRniZ96LtKIVjNzGs7SjANBgkqhkiG9w0BAQUFADCB",
 	"searchEnd": "-----END CERTIFICATE-----\u000a",
-	"replaceJson": "../cagen/result-CA1.json"
+	"replaceJson": "../cagen/result-Verisign.json"
 }

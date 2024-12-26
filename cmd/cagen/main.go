@@ -48,15 +48,16 @@ type Result struct {
 	fslSets    []*bitset.BitSet
 	fslCerts   []map[int]certs.Cert
 	stats      struct {
-		completedLens        int32
-		checkedKeys          int64
-		skippedKeys          int64
-		matches              int32
-		certsWithFSLMatch    [SliceLen]int64
-		matchesForLens       [SliceLen]int32
-		checksForLens        [SliceLen]int64
-		numSlicesNotMatched  [MaxSlices]int64
-		firstMismatchedSlice [MaxSlices]int64
+		completedLens         int32
+		checkedKeys           int64
+		skippedKeys           int64
+		matches               int32
+		certsWithFSLMatch     [SliceLen]int64
+		certPairsWithFSLMatch [SliceLen]int64
+		matchesForLens        [SliceLen]int32
+		checksForLens         [SliceLen]int64
+		numSlicesNotMatched   [MaxSlices]int64
+		firstMismatchedSlice  [MaxSlices]int64
 	}
 }
 
@@ -426,27 +427,44 @@ func main() {
 			w.WriteHeader(http.StatusOK)
 			result.lock.RLock()
 			count := len(result.fslSets)
-			var copied [SliceLen]int64
+			var copiedCertsMatched [SliceLen]int64
 			for i := 0; i < SliceLen; i++ {
-				copied[i] = result.stats.certsWithFSLMatch[i]
+				copiedCertsMatched[i] = result.stats.certsWithFSLMatch[i]
+			}
+			var copiedCertPairsMatched [SliceLen]int64
+			for i := 0; i < SliceLen; i++ {
+				copiedCertPairsMatched[i] = result.stats.certPairsWithFSLMatch[i]
 			}
 			result.lock.RUnlock()
 			var sb strings.Builder
-			var found int
-			for i := SliceLen - 1; i >= 0 && found < 20; i-- {
-				if copied[i] > 0 {
-					fmt.Fprintf(&sb, "[%d]->%d ", i, copied[i])
-					found++
+			{
+				var found int
+				for i := SliceLen - 1; i >= 0 && found < 20; i-- {
+					if copiedCertsMatched[i] > 0 {
+						fmt.Fprintf(&sb, "[%d]->%d ", i, copiedCertsMatched[i])
+						found++
+					}
+				}
+			}
+			var sbPairs strings.Builder
+			{
+				var found int
+				for i := SliceLen - 1; i >= 0 && found < 20; i-- {
+					if copiedCertPairsMatched[i] > 0 {
+						fmt.Fprintf(&sbPairs, "[%d]->%d ", i, copiedCertPairsMatched[i])
+						found++
+					}
 				}
 			}
 			fmt.Fprintf(
 				w,
-				"[%d/%d lens] Missing lens: %s, %d sets, topk: %s",
+				"[%d/%d lens] Missing lens: %s, %d sets, topk: %s, toppairs: %s",
 				atomic.LoadInt32(&result.stats.completedLens),
 				SliceLen,
 				humanizeRange(keySlice),
 				count,
 				sb.String(),
+				sbPairs.String(),
 			)
 		})
 		log.Fatal(http.ListenAndServe(":6060", nil))
@@ -755,8 +773,9 @@ func certsetup(blob []byte, algo Algo, sliceLen int, result *Result, logger Logg
 		j := len(result.fslSets) - 1
 		for i := 0; i < j; i++ {
 			ikCount := result.fslSets[i].UnionCardinality(result.fslSets[j])
+			atomic.AddInt64(&result.stats.certPairsWithFSLMatch[ikCount], 1)
 
-			if ikCount >= SliceLen {
+			if ikCount >= SliceLen-1 {
 				result.FoundCerts = make(map[int]certs.Cert)
 				for firstSliceLen, cert := range result.fslCerts[i] {
 					if err := result.AddCertLocked(firstSliceLen, cert.Private, cert.PublicMangled, cert.Public); err != nil {

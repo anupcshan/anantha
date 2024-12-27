@@ -2,6 +2,8 @@ package main
 
 import (
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -148,6 +150,39 @@ func MetricsHandler(loadedValues *LoadedValues) http.Handler {
 		lastMessageReceievedTimestampGauge.Set(float64(timestamp.Unix()))
 	})
 	prometheus.MustRegister(lastMessageReceievedTimestampGauge)
+
+	yearlyUsageGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "anantha",
+		Name:      "yearly_usage",
+		Help:      "Yearly Usage (kWh)",
+	}, []string{"year", "type"})
+	loadedValues.OnChangeRegex(regexp.MustCompile("^/usage/year[0-9]*/[a-z]*$"), func(kwh TimestampedValue) {
+		splits := strings.Split(kwh.value.Name, "/")
+		yearlyUsageGauge.WithLabelValues(splits[2], splits[3]).Set(float64(kwh.value.GetAnotherIntValue()))
+	})
+	prometheus.MustRegister(yearlyUsageGauge)
+
+	monthlyUsageGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "anantha",
+		Name:      "monthly_usage",
+		Help:      "Monthly Usage (kWh)",
+	}, []string{"month", "type"})
+	loadedValues.OnChangeRegex(regexp.MustCompile("^/usage/month[0-9]*/[a-z]*$"), func(kwh TimestampedValue) {
+		splits := strings.Split(kwh.value.Name, "/")
+		monthlyUsageGauge.WithLabelValues(splits[2], splits[3]).Set(float64(kwh.value.GetIntValue()))
+	})
+	prometheus.MustRegister(monthlyUsageGauge)
+
+	dailyUsageGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "anantha",
+		Name:      "daily_usage",
+		Help:      "Daily Usage (kWh)",
+	}, []string{"day", "type"})
+	loadedValues.OnChangeRegex(regexp.MustCompile("^/usage/day[0-9]*/[a-z]*$"), func(kwh TimestampedValue) {
+		splits := strings.Split(kwh.value.Name, "/")
+		dailyUsageGauge.WithLabelValues(splits[2], splits[3]).Set(float64(kwh.value.GetIntValue()))
+	})
+	prometheus.MustRegister(dailyUsageGauge)
 
 	return promhttp.Handler()
 }

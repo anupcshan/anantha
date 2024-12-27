@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -348,6 +349,11 @@ func (t TimestampedValue) ToString() string {
 	return prototext.Format(t.value)
 }
 
+type RegexSub struct {
+	ch chan TimestampedValue
+	re *regexp.Regexp
+}
+
 type LoadedValues struct {
 	values map[string]TimestampedValue
 	lock   sync.Mutex
@@ -355,6 +361,7 @@ type LoadedValues struct {
 	globalLastUpdated time.Time
 
 	subscriptions       map[string][]chan TimestampedValue
+	regexSubscriptions  []RegexSub
 	globalSubscriptions []chan time.Time
 }
 
@@ -391,6 +398,15 @@ func (l *LoadedValues) Update(k string, v *carrier.ConfigSetting, ts time.Time) 
 		}
 	}
 
+	for _, sub := range l.regexSubscriptions {
+		if sub.re.MatchString(k) {
+			select {
+			case sub.ch <- l.values[k]:
+			default: // Don't block
+			}
+		}
+	}
+
 	return true
 }
 
@@ -423,6 +439,39 @@ func (l *LoadedValues) GlobalSubscribe() <-chan time.Time {
 	l.globalSubscriptions = append(l.globalSubscriptions, ch)
 
 	return ch
+}
+
+func (l *LoadedValues) RegexSubscribe(re *regexp.Regexp) <-chan TimestampedValue {
+	ch := make(chan TimestampedValue, 100) // Large enough to not cause dropping
+
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	l.regexSubscriptions = append(l.regexSubscriptions, RegexSub{
+		ch: ch,
+		re: re,
+	})
+
+	return ch
+}
+
+func (l *LoadedValues) OnChangeRegex(re *regexp.Regexp, callback func(TimestampedValue)) {
+	subCh := l.RegexSubscribe(re)
+
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	for k, v := range l.values {
+		if re.MatchString(k) {
+			callback(v)
+		}
+	}
+
+	go func() {
+		for ch := range subCh {
+			callback(ch)
+		}
+	}()
 }
 
 func (l *LoadedValues) Subscribe(topics []string) <-chan TimestampedValue {

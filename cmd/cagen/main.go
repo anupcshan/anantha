@@ -159,17 +159,12 @@ func (s Set) AddAll(other Set) {
 }
 
 func writeResult(fName string, result *Result) error {
-	f, err := os.OpenFile(fName, os.O_RDWR|os.O_CREATE, 0755)
+	b, err := json.Marshal(result)
 	if err != nil {
 		return err
 	}
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(result); err != nil {
-		return err
-	}
 
-	return f.Close()
+	return os.WriteFile(fName, b, 0755)
 }
 
 func loadResult(fName string) (*Result, error) {

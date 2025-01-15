@@ -768,9 +768,12 @@ func certsetup(blob []byte, algo Algo, sliceLen int, result *Result, logger Logg
 		j := len(result.fslSets) - 1
 		for i := 0; i < j; i++ {
 			ikCount := result.fslSets[i].UnionCardinality(result.fslSets[j])
-			atomic.AddInt64(&result.stats.certPairsWithFSLMatch[ikCount], 1)
 
-			if ikCount >= SliceLen-1 {
+			if ikCount < SliceLen {
+				atomic.AddInt64(&result.stats.certPairsWithFSLMatch[ikCount], 1)
+			}
+
+			if ikCount >= SliceLen {
 				result.FoundCerts = make(map[int]certs.Cert)
 				for firstSliceLen, cert := range result.fslCerts[i] {
 					if err := result.AddCertLocked(firstSliceLen, cert.Private, cert.PublicMangled, cert.Public); err != nil {

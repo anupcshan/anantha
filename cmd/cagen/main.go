@@ -756,7 +756,7 @@ func certsetup(blob []byte, algo Algo, sliceLen int, result *Result, logger Logg
 		}
 	}
 
-	if fslMatched.Len() > 0 {
+	if fslMatched.Count() > 0 {
 		result.lock.Lock()
 		atomic.AddInt64(&result.stats.certsWithFSLMatch[fslMatched.Count()], 1)
 		result.fslSets = append(result.fslSets, fslMatched)

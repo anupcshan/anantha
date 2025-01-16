@@ -29,6 +29,7 @@ import (
 
 	"github.com/anupcshan/anantha/certs"
 	"github.com/bits-and-blooms/bitset"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
@@ -666,7 +667,7 @@ func certsetup(blob []byte, algo Algo, sliceLen int, result *Result, logger Logg
 	ca := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			CommonName: "A",
+			CommonName: uuid.NewString(),
 		},
 		NotBefore: parsedCA.NotBefore,
 		NotAfter:  parsedCA.NotAfter,

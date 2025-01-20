@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"log"
@@ -10,11 +11,14 @@ import (
 	"github.com/anupcshan/anantha/membuf"
 )
 
+var (
+	//go:embed replace.json
+	replaceJSON []byte
+)
+
 func main() {
 	in := flag.String("in", "", "Input hex file")
 	out := flag.String("out", "", "Output hex file")
-
-	replaceCfg := flag.String("replace-cfg", "", "File containing replacement config")
 
 	flag.Parse()
 
@@ -26,12 +30,7 @@ func main() {
 	}
 
 	var updateCfg membuf.UpdateConfig
-	replaceF, err := os.Open(*replaceCfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := json.NewDecoder(replaceF).Decode(&updateCfg); err != nil {
+	if err := json.Unmarshal(replaceJSON, &updateCfg); err != nil {
 		log.Fatal(err)
 	}
 

@@ -577,13 +577,13 @@ func NewLoadedValues() *LoadedValues {
 }
 
 func main() {
-	ntpAddrStr := flag.String("ntp-addr", "", "NTP IPv4 Address")
+	ntpAddrStr := flag.String("ntp-addr", "", "NTP IPv4 Address (if unset, we won't respond to DNS requests for *.ntp.org)")
 	haMQTTAddr := flag.String("ha-mqtt-addr", "", "Home Assistant MQTT Host")
 	haMQTTTopicPrefix := flag.String("ha-mqtt-topic-prefix", "", "Home Assistant MQTT Topic Prefix")
 	protosDir := flag.String("reqs-dir", "$HOME/.anantha/protos", "Directory where request protos are stored")
-	clientID := flag.String("client-id", "hello", "MQTT Client ID")
+	clientID := flag.String("client-id", "hello", "MQTT Client ID (this should be the same as the HVAC device ID, e.g. '4123X123456')")
 	thingNameOverride := flag.String("thing-name-override", "", "Thingname override - you should never need to set this")
-	proxyToAWSIOT := flag.Bool("proxy", false, "Proxy requests to AWS IOT - requires a valid client certificate for now")
+	proxyToAWSIOT := flag.Bool("proxy", false, "Proxy requests to AWS IOT - requires a valid client certificate for now (strongly discouraged)")
 
 	flag.Parse()
 

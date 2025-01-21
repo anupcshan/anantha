@@ -65,6 +65,8 @@ Access the web dashboard:
 - Status page: `http://<ANANTHA_IP>:26268`
 - Recent updates log: `http://<ANANTHA_IP>:26268/recent`
 
+![Dashboard](dashboard.png)
+
 ## Compatibility
 
 Known working devices and firmware versions:

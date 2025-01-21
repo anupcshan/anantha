@@ -80,4 +80,6 @@ Known working devices and firmware versions:
 
 Since firmware v4.17, Carrier thermostats use AWS IoT for MQTT communication. Unfortunately, AWS IoT client libraries pin a small list of valid CA certificates. The firmware modification replaces an existing trusted CA certificate with Anantha's CA certificate, enabling MQTT traffic interception. The generated CA certificate matches the checksum of the replaced certificate. This approach was chosen because modifying firmware checksums proved challenging.
 
-For technical implementation details, see the `cmd/cagen` directory.
+For sparse details about the certificate generation process, see the `cmd/cagen` directory.
+
+For a barebones proto definition of the communication over MQTT, see protobuf definitions in the `proto` directory.

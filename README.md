@@ -2,6 +2,10 @@
 
 Anantha enables local control of Carrier Infinity thermostats by intercepting DNS requests and redirecting HTTP/MQTT connections. It provides a web dashboard and Home Assistant integration for thermostat control.
 
+## About the Name
+
+Anantha (അനന്ത) is a Malayalam word meaning "infinite".
+
 > ⚠️ **WARNING**: Using Anantha requires modifying your thermostat's firmware which will likely void your warranty. Improper use of your HVAC may cause its destruction or lead to property damage. Use at your own risk. Anantha is not affiliated with Carrier and assumes no responsibility for any issues that may arise.
 
 > ⚠️ **WARNING**: Installing this modified *will* disable your thermostat from communicating directly with Carrier's APIs. This means you will not be able to use the Carrier mobile app or web interface to control your thermostat. DO NOT install this firmware if you want to use the Carrier mobile app.
@@ -55,7 +59,7 @@ Set your thermostat's DNS Server to Anantha's IP address.
 - DNS server (port 53) for Carrier hostname resolution
 - MQTT broker (port 8883) for thermostat communication
 - HTTP server (ports 80, 443) for firmware updates and requests
-- Web dashboard (port 26268) for debugging
+- Web dashboard (port 26268 - spells "ANANT" on a phone keypad) for debugging
 - Home Assistant integration with auto-discovery for controlling the thermostat
 - Optional MQTT proxying to AWS IoT (requires additional setup)
 

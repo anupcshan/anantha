@@ -56,12 +56,12 @@ Set your thermostat's DNS Server to Anantha's IP address.
 - MQTT broker (port 8883) for thermostat communication
 - HTTP server (ports 80, 443) for firmware updates and requests
 - Web dashboard (port 26268) for debugging
-- Home Assistant integration with auto-discovery
+- Home Assistant integration with auto-discovery for controlling the thermostat
 - Optional MQTT proxying to AWS IoT (requires additional setup)
 
 ## Debugging
 
-Access the web dashboard:
+Access the (read-only) web dashboard:
 - Status page: `http://<ANANTHA_IP>:26268`
 - Recent updates log: `http://<ANANTHA_IP>:26268/recent`
 

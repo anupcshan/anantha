@@ -41,7 +41,7 @@ The server provides:
 - Optional MQTT proxying to AWS IoT (requires additional certs setup) for integration with Carrier mobile app
 
 ### Prepare and update HVAC firmware
-1. Download and extract the firmware for your thermostat from the [Carrier Infinity Thermostat Firmware page](https://www.myinfinitytouch.carrier.com/Infinity/Downloads). You need a file that looks like `BINF0456.hex` (`0456` here is the firmware version, it may be different for you).
+1. Download and extract the firmware for your thermostat from the [Carrier Infinity Thermostat Firmware page](https://www.myinfinitytouch.carrier.com/Infinity/Downloads). You need a file that looks like `BINF0456.hex` (`0456` here is the firmware version, it may be different for you). This tool will patch the firmware to include a CA certificate that the thermostat will trust, allowing Anantha to handle MQTT connections.
 2. Use `hexsed` to patch the firmware with the CA certificate.
 ```bash
 hexsed -in original/BINF0456.hex -out updated/BINF0456.hex
@@ -57,3 +57,17 @@ TODO: Add more details.
 
 ### Debugging
 You can access the web dashboard at `http://<ANANTHA_IP>:26268` to see the current status. See `http://<ANANTHA_IP>:26268/recent` to see a log of recently updated values (warning: there's a lot of them)
+
+## What devices and firmware versions are known to work?
+
+| Manufacturer | Device Model | Version|
+|---|---|---|
+| Carrier | SYSTXCCITC01-B | v4.47 |
+| Carrier | SYSTXCCITC01-B | v4.56 |
+
+
+## How does this work?
+
+With version 4.17, the HVAC primarily communicates with Carrier servers over MQTT - Carrier uses AWS IoT to do this. Unfortunately, AWS IoT client libraries pin a small list of valid CA certificates - this prevents any MITM shenanigans, which is very commendable. However, this also means that we can't use Anantha to proxy the HVAC's MQTT traffic.
+
+Instead, we patch the HVAC's firmware to trust Anantha's CA certificate. This allows us to use Anantha to proxy the HVAC's MQTT traffic. If you're interested, look in `cmd/cagen` for a script that generates a CA certificate that can replace an existing CA certificate while maintaining the same firmware checksum. @anupcshan spent a bunch of time in 2023 trying to figure out how to update the checksum itself and failed, so we're stuck with this solution for now.

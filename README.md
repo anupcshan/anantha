@@ -6,7 +6,7 @@ Anantha enables local control of Carrier Infinity thermostats by intercepting DN
 
 Anantha (അനന്ത) is a Malayalam word meaning "infinite".
 
-> ⚠️ **WARNING**: Using Anantha requires modifying your thermostat's firmware which will likely void your warranty. Improper use of your HVAC may cause its destruction or lead to property damage. Use at your own risk. Anantha is not affiliated with Carrier and assumes no responsibility for any issues that may arise.
+> ⚠️ **WARNING**: Using Anantha requires modifying your thermostat's firmware which will likely void your warranty. Improper use of your thermostat/HVAC may cause its destruction or lead to property damage. Use at your own risk. Anantha is not affiliated with Carrier and assumes no responsibility for any issues that may arise.
 
 > ⚠️ **WARNING**: Installing this modified *will* disable your thermostat from communicating directly with Carrier's APIs. This means you will not be able to use the Carrier mobile app or web interface to control your thermostat. DO NOT install this firmware if you want to use the Carrier mobile app.
 
@@ -16,7 +16,7 @@ This project was inspired by [Infinitude](https://github.com/nebulous/infinitude
 
 1. Go programming language - Install from [golang.org/dl](http://golang.org/dl)
 2. Your thermostat's firmware file (downloaded from [Carrier Infinity Thermostat Firmware page](https://www.myinfinitytouch.carrier.com/Infinity/Downloads))
-3. Your HVAC Device Serial ID (See "Service" -> "Model/Serial Numbers" -> "System Control" -> "Serial Number" in the thermostat's web interface - usually of the form "4123X123456")
+3. Your Thermostat Device Serial ID (See "Service" -> "Model/Serial Numbers" -> "System Control" -> "Serial Number" in the thermostat's web interface - usually of the form "4123X123456")
 
 ## Installation
 
@@ -47,7 +47,7 @@ anantha \
   -ntp-addr <NTP_IP> \                           # NTP server IP (e.g., 192.168.86.1)
   -ha-mqtt-addr <HA_MQTT_IP> \                   # Home Assistant MQTT server IP
   -ha-mqtt-topic-prefix <HA_MQTT_TOPIC_PREFIX> \ # e.g., hvac/carrier
-  -client-id <HVAC_DEVICE_ID>                    # Your HVAC Serial ID
+  -client-id <THERMOSTAT_DEVICE_ID>              # Your Thermostat Serial ID
 ```
 
 ### 3. Configure Thermostat

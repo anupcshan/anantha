@@ -2,18 +2,13 @@ package main
 
 import (
 	_ "embed"
-	"encoding/json"
 	"flag"
 	"log"
 	"os"
 
+	"github.com/anupcshan/anantha/cagenresults"
 	"github.com/anupcshan/anantha/intelhex"
 	"github.com/anupcshan/anantha/membuf"
-)
-
-var (
-	//go:embed replace.json
-	replaceJSON []byte
 )
 
 func main() {
@@ -29,10 +24,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var updateCfg membuf.UpdateConfig
-	if err := json.Unmarshal(replaceJSON, &updateCfg); err != nil {
-		log.Fatal(err)
-	}
+	var updateCfg membuf.UpdateConfig = cagenresults.Verisign
 
 	buf := membuf.NewMemBuffer()
 	parser := intelhex.NewParser(f, buf)

@@ -16,7 +16,7 @@ import (
 type UpdateConfig struct {
 	SearchBegin string
 	SearchEnd   string
-	ReplaceJson string
+	Result      Result
 }
 
 type replaceConfig struct {
@@ -280,13 +280,8 @@ func (m *memBuffer) Update(updateCfg *UpdateConfig, records []intelhex.Record) {
 
 		var replacements []*replaceConfig
 
-		result, err := loadResult(updateCfg.ReplaceJson)
-		if err != nil {
-			panic(err)
-		}
-
 		replacements = append(replacements, &replaceConfig{
-			str: result.FoundCerts[firstSliceLen].PublicMangled,
+			str: updateCfg.Result.FoundCerts[firstSliceLen].PublicMangled,
 		})
 
 		if len(replacements[0].str) == 0 {

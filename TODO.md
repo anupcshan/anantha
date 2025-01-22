@@ -5,17 +5,18 @@
 - [x] Publish some controls via an external MQTT broker - this is usable by Home Assistant
 - [x] Proxy requests to AWS IOT for anyone who still wants to use the Carrier App - this was mainly used for reverse engineering and I would recommend not actually relying on this
 - [x] All the tooling that was used to generate certs and perform firmware mangling (its in another private repo)
-- [ ] Documentation and Howto guides
+- [x] Documentation and Howto guides
 - [ ] Better Home Assistant integration
   - [x] Full auto-discovery
   - [ ] Expose all missing controls like temperature, vacation etc)
   - [ ] HACS?
-- [x] Figure out a solution for thermostat connection instability (drops connection randomly) - this was because of my wireless AP (don't use Unifi nanoHD) :(
+- [ ] Make the web dashboard read-write
+   - [ ] Calendar integration
 - [x] Figure out a reasonable way to handle cert change between different firmware versions (today, the mangled cert is custom to a given firmware file).
   After a firmware update, we need to change the cert being presented by anantha to allow thermostat to connect.
 - [ ] Better proto cleanup. We dump protobufs sent by thermostat in a directory which gets garbage collected on process startup.
   Do this on a schedule or as required.
-- [ ] Weather integration with Open Meteo?
+- [ ] Weather integration with Open Meteo? Currently, we pretend to be in a California summer all year round.
 - [ ] Perform firmware patching via auto-update mechanism within the thermostat. Could be a way to onboard without needing an SD-card to flash firmware.
   Kind of dangerous given how some bits in the thermostat cannot be overwritten once set (like AWS IOT thingname, certs etc?). Could cause
   the thermostat to potentially get "bricked" if you want to use AWS IOT/Carrier API again.

@@ -13,7 +13,6 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math/big"
 	"os"
@@ -367,20 +366,6 @@ var (
 	}
 )
 
-func humanizeDuration(minutes float64) string {
-	if minutes < 60 {
-		return fmt.Sprintf("%.2f mins", minutes)
-	} else if minutes < 60*24 {
-		return fmt.Sprintf("%.2f hrs", minutes/60)
-	} else if minutes < 60*24*7 {
-		return fmt.Sprintf("%.2f days", minutes/(60*24))
-	} else if minutes < 60*24*365 {
-		return fmt.Sprintf("%.2f wks", minutes/(60*24*7))
-	} else {
-		return fmt.Sprintf("%.2f yrs", minutes/(60*24*265))
-	}
-}
-
 func main() {
 	algoName := flag.String("algo", "256", "Algorithm (256 or 384 or CA1)")
 	flag.Parse()
@@ -479,7 +464,7 @@ func main() {
 					return nil
 				}
 
-				err := certsetup(blob, algo, SliceLen, result, logger)
+				err := certsetup(blob, algo, result, logger)
 				if err != nil {
 					return err
 				}
@@ -529,129 +514,7 @@ type Logger interface {
 	Printf(format string, v ...any)
 }
 
-func indicateUpdated(ipToByteFlippedIndex *[MaxFreeBytes]map[int]struct{}, ipIdx int, blobIdx int) {
-	mp := ipToByteFlippedIndex[ipIdx]
-	if mp == nil {
-		mp = make(map[int]struct{})
-		ipToByteFlippedIndex[ipIdx] = mp
-	}
-
-	mp[blobIdx] = struct{}{}
-}
-
-type ipByte struct {
-	ipIdx int
-}
-
-func generateOutputByteToInputIPIndex(ipToByteFlippedIndex [MaxFreeBytes]map[int]struct{}) map[int][]ipByte {
-	index := make(map[int]map[ipByte]struct{})
-	for ipIdx := 0; ipIdx < len(ipToByteFlippedIndex); ipIdx++ {
-		for touched := range ipToByteFlippedIndex[ipIdx] {
-			t := index[touched]
-			if t == nil {
-				t = make(map[ipByte]struct{})
-				index[touched] = t
-			}
-
-			t[ipByte{ipIdx}] = struct{}{}
-		}
-	}
-
-	result := make(map[int][]ipByte)
-
-	for touched, causes := range index {
-		if len(causes) > 10 {
-			// Most likely a signature byte, which is mutated by a lot of sources
-			continue
-		}
-
-		for cause := range causes {
-			result[touched] = append(result[touched], cause)
-		}
-	}
-
-	return result
-}
-
-func analyze(blob []byte, algo Algo) (map[int][]ipByte, error) {
-	block, _ := pem.Decode(blob)
-	ca, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	ca.PublicKey = nil
-	if algo.SignatureAlgorithm != x509.UnknownSignatureAlgorithm {
-		ca.SignatureAlgorithm = algo.SignatureAlgorithm
-	}
-
-	genKey, err := algo.GenerateKey()
-	if err != nil {
-		return nil, err
-	}
-
-	ca.ExtraExtensions = algo.StuffExtraExtensions()
-
-	stableRand := make([]byte, 1*1024*1024)
-	_, _ = rand.Reader.Read(stableRand)
-
-	var ipToByteFlippedIndex [MaxFreeBytes]map[int]struct{}
-
-	if len(ca.ExtraExtensions) == 0 {
-		return map[int][]ipByte{}, nil
-	}
-
-	for ipIdx := 0; ipIdx < len(ca.ExtraExtensions[0].Value); ipIdx++ {
-		for val := 0; val < 256; val = val<<1 + 1 {
-			ca.ExtraExtensions[0].Value[ipIdx] = byte(val)
-
-			caBytes, err := x509.CreateCertificate(newSignerRandReader(stableRand), ca, ca, genKey.GetPublicKey(), genKey.GetPrivateKey())
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to create certificate")
-			}
-
-			caPEM := new(bytes.Buffer)
-			_ = pem.Encode(caPEM, &pem.Block{
-				Type:  "CERTIFICATE",
-				Bytes: caBytes,
-			})
-
-			if caPEM.Len() != len(blob) {
-				log.Printf("Bad length, expected %d got %d", len(blob), caPEM.Len())
-				continue
-			}
-
-			blob = caPEM.Bytes()
-
-			ca.ExtraExtensions[0].Value[ipIdx] = byte(val + 1)
-
-			caBytes2, err := x509.CreateCertificate(newSignerRandReader(stableRand), ca, ca, genKey.GetPublicKey(), genKey.GetPrivateKey())
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to create certificate")
-			}
-			caPEM2 := new(bytes.Buffer)
-			_ = pem.Encode(caPEM2, &pem.Block{
-				Type:  "CERTIFICATE",
-				Bytes: caBytes2,
-			})
-
-			if caPEM2.Len() != len(blob) {
-				log.Printf("Bad length, expected %d got %d", len(blob), caPEM2.Len())
-				continue
-			}
-			blob2 := caPEM2.Bytes()
-			for blobIdx := 0; blobIdx < len(blob); blobIdx++ {
-				if blob[blobIdx] != blob2[blobIdx] {
-					indicateUpdated(&ipToByteFlippedIndex, ipIdx, blobIdx)
-				}
-			}
-		}
-	}
-
-	return generateOutputByteToInputIPIndex(ipToByteFlippedIndex), nil
-}
-
-func certsetup(blob []byte, algo Algo, sliceLen int, result *Result, logger Logger) error {
+func certsetup(blob []byte, algo Algo, result *Result, logger Logger) error {
 	block, _ := pem.Decode(blob)
 	parsedCA, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
@@ -733,15 +596,12 @@ func certsetup(blob []byte, algo Algo, sliceLen int, result *Result, logger Logg
 			newBlob[3]++
 			newBlob[4]--
 		}
-		stuffedInternalBytes, matched := verifyFixedBlobs(firstSliceLen, blob, newBlob, toStuff, result, logger)
+		stuffedInternalBytes, matched := verifyFixedBlobs(firstSliceLen, blob, newBlob, toStuff, result)
 		if !matched {
 			continue
 		}
-		if !fixupStuffBytes(firstSliceLen, blob, newBlob, toStuff-stuffedInternalBytes, result) {
-			// log.Println("Unable to fixup")
+		if !fixupStuffBytes(firstSliceLen, blob, newBlob, toStuff-stuffedInternalBytes) {
 			continue
-		} else {
-			// log.Printf("Fixed up for %d!", firstSliceLen)
 		}
 		fnms := firstNonMatchingSlice(firstSliceLen, blob, newBlob, result)
 		if fnms == -1 {
@@ -795,7 +655,7 @@ func certsetup(blob []byte, algo Algo, sliceLen int, result *Result, logger Logg
 	return nil
 }
 
-func verifyFixedBlobs(firstSliceLen int, blob []byte, newBlob []byte, stuffPrefixBytes int, result *Result, logger Logger) (int, bool) {
+func verifyFixedBlobs(firstSliceLen int, blob, newBlob []byte, stuffPrefixBytes int, result *Result) (int, bool) {
 	start := 0
 	matches := 0
 	slices := 0
@@ -890,7 +750,7 @@ func verifyFixedBlobs(firstSliceLen int, blob []byte, newBlob []byte, stuffPrefi
 	return stuffedInternalBytes, true
 }
 
-func fixupStuffBytes(firstSliceLen int, blob []byte, newBlob []byte, stuffPrefixBytes int, result *Result) bool {
+func fixupStuffBytes(firstSliceLen int, blob, newBlob []byte, stuffPrefixBytes int) bool {
 	start := 0
 
 	for end := firstSliceLen; start < len(blob); end += SliceLen {
@@ -1001,96 +861,4 @@ func firstNonMatchingSlice(firstSliceLen int, blob []byte, newBlob []byte, resul
 
 	atomic.AddInt64(&result.stats.firstMismatchedSlice[firstMismatch+1], 1)
 	return firstMismatch
-}
-
-func permute(blob []byte, ca *x509.Certificate, result *Result, stableRand []byte, genKey Key, firstSliceLen int, minMatches int, logger Logger, byteIndex map[int][]ipByte) error {
-	if result.Found(firstSliceLen) {
-		return nil
-	}
-
-	start := firstSliceLen + SliceLen*(minMatches-1)
-	end := start + SliceLen
-
-	for blobIdx := start; blobIdx < end; blobIdx++ {
-		for _, update := range byteIndex[blobIdx] {
-			if result.Found(firstSliceLen) {
-				return nil
-			}
-
-			save := ca.ExtraExtensions[0].Value[update.ipIdx]
-
-			var foundAtLeastOneLonger bool
-
-			for i := byte(0); i < 255 && !foundAtLeastOneLonger; i++ {
-				ca.ExtraExtensions[0].Value[update.ipIdx] = save + i
-
-				caBytes, err := x509.CreateCertificate(newSignerRandReader(stableRand), ca, ca, genKey.GetPublicKey(), genKey.GetPrivateKey())
-				if err != nil {
-					return errors.Wrap(err, "failed to create certificate")
-				}
-
-				// pem encode
-				caPEM := new(bytes.Buffer)
-				_ = pem.Encode(caPEM, &pem.Block{
-					Type:  "CERTIFICATE",
-					Bytes: caBytes,
-				})
-
-				if len(blob) != caPEM.Len() {
-					atomic.AddInt64(&result.stats.skippedKeys, 1)
-					logger.Printf("Expected %d, got %d", len(blob), caPEM.Len())
-				} else {
-					atomic.AddInt64(&result.stats.checkedKeys, 1)
-					atomic.AddInt64(&result.stats.checksForLens[firstSliceLen], 1)
-
-					fnms := firstNonMatchingSlice(firstSliceLen, blob, caPEM.Bytes(), result)
-					if fnms == -1 {
-						pk, _ := x509.MarshalPKCS8PrivateKey(genKey.GetPrivateKey())
-						pemEncoded := pem.EncodeToMemory(&pem.Block{
-							Type:  "PRIVATE KEY",
-							Bytes: pk,
-						})
-
-						if err := result.AddCert(firstSliceLen, pemEncoded, caPEM.Bytes(), caPEM.Bytes()); err != nil {
-							return errors.Wrap(err, "Could not add cert")
-						}
-					}
-
-					if fnms > minMatches {
-						// Worth pursing further
-						if err := permute(blob, ca, result, stableRand, genKey, firstSliceLen, fnms, logger, byteIndex); err != nil {
-							return errors.Wrap(err, "Error sub-permute")
-						}
-						foundAtLeastOneLonger = true
-					}
-				}
-			}
-			ca.ExtraExtensions[0].Value[update.ipIdx] = save
-		}
-	}
-
-	return nil
-}
-
-type signerRandReader struct {
-	r        io.Reader
-	notFirst bool
-}
-
-func newSignerRandReader(b []byte) *signerRandReader {
-	return &signerRandReader{
-		r: bytes.NewReader(b),
-	}
-}
-
-func (s *signerRandReader) Read(b []byte) (int, error) {
-	if !s.notFirst {
-		s.notFirst = true
-		if len(b) == 1 {
-			b[0] = '\x00'
-			return 1, nil
-		}
-	}
-
-	return s.r.Read(b)
 }

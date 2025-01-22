@@ -2,11 +2,9 @@ package membuf
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"sort"
 
 	"github.com/anupcshan/anantha/certs"
@@ -231,27 +229,6 @@ func (m *memBuffer) Reader() io.Reader {
 
 type Result struct {
 	FoundCerts map[int]certs.Cert
-}
-
-func loadResult(fName string) (*Result, error) {
-	f, err := os.Open(fName)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &Result{
-				FoundCerts: make(map[int]certs.Cert),
-			}, nil
-		}
-		return nil, err
-	}
-
-	var result Result
-	dec := json.NewDecoder(f)
-	if err := dec.Decode(&result); err != nil {
-		return nil, err
-	}
-	_ = f.Close()
-
-	return &result, nil
 }
 
 func (m *memBuffer) Update(updateCfg *UpdateConfig, records []intelhex.Record) {

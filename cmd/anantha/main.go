@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"embed"
 	_ "embed"
@@ -487,7 +488,7 @@ func (l *LoadedValues) Subscribe(topics []string) <-chan TimestampedValue {
 	return ch
 }
 
-func (l *LoadedValues) OnChangeN(topics []string, callback func([]TimestampedValue)) {
+func (l *LoadedValues) OnChangeN(ctx context.Context, topics []string, callback func([]TimestampedValue)) {
 	recentValues := map[string]TimestampedValue{}
 
 	subCh := l.Subscribe(topics)
@@ -513,21 +514,26 @@ func (l *LoadedValues) OnChangeN(topics []string, callback func([]TimestampedVal
 	maybeCallback()
 
 	go func() {
-		for ch := range subCh {
-			recentValues[ch.value.Name] = ch
-			maybeCallback()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ch := <-subCh:
+				recentValues[ch.value.Name] = ch
+				maybeCallback()
+			}
 		}
 	}()
 }
 
 func (l *LoadedValues) OnChange1(topic string, callback func(TimestampedValue)) {
-	l.OnChangeN([]string{topic}, func(tv []TimestampedValue) {
+	l.OnChangeN(context.Background(), []string{topic}, func(tv []TimestampedValue) {
 		callback(tv[0])
 	})
 }
 
 func (l *LoadedValues) OnChange2(topic1, topic2 string, callback func(val1, val2 TimestampedValue)) {
-	l.OnChangeN([]string{topic1, topic2}, func(tv []TimestampedValue) {
+	l.OnChangeN(context.Background(), []string{topic1, topic2}, func(tv []TimestampedValue) {
 		callback(tv[0], tv[1])
 	})
 }
@@ -849,39 +855,38 @@ func main() {
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
 
-			for {
-				entries := loadedValues.Snapshot()
-				data := map[string]string{}
-				var ts time.Time
+			topics := []string{
+				"sensor/wallControl/rh",
+				"sensor/wallControl/rt",
+				"system/oat",
+				"system/mode",
+				"1/clsp",
+				"1/currentActivity",
+				"1/fan",
+				"1/htsp",
+				"1/name",
+				"1/rh",
+				"1/rt",
+				"1/zoneconditioning",
+				"blwrpm",
+				"comprpm",
+				"instant",
+				"cfm",
+				"opstat",
+				"opmode",
+				"oducoiltmp",
+				"sucttemp",
+				"dischargetmp",
+				"profile/firmware",
+				"profile/iduversion",
+				"profile/oduversion",
+			}
 
-				for _, k := range []string{
-					"sensor/wallControl/rh",
-					"sensor/wallControl/rt",
-					"system/oat",
-					"system/mode",
-					"1/clsp",
-					"1/currentActivity",
-					"1/fan",
-					"1/htsp",
-					"1/name",
-					"1/rh",
-					"1/rt",
-					"1/zoneconditioning",
-					"blwrpm",
-					"comprpm",
-					"instant",
-					"cfm",
-					"opstat",
-					"opmode",
-					"oducoiltmp",
-					"sucttemp",
-					"dischargetmp",
-					"profile/firmware",
-					"profile/iduversion",
-					"profile/oduversion",
-				} {
-					ent := entries[k]
-					data[k] = ent.ToString()
+			var ts time.Time
+			loadedValues.OnChangeN(r.Context(), topics, func(tv []TimestampedValue) {
+				data := map[string]string{}
+				for i, ent := range tv {
+					data[topics[i]] = ent.ToString()
 					if ts.Before(ent.lastUpdated) {
 						ts = ent.lastUpdated
 					}
@@ -901,13 +906,9 @@ func main() {
 				}
 
 				w.(http.Flusher).Flush()
+			})
 
-				select {
-				case <-r.Context().Done():
-					return
-				case <-ticker.C:
-				}
-			}
+			<-r.Context().Done()
 		}))
 
 		webControlMux.HandleFunc("/recent", func(w http.ResponseWriter, r *http.Request) {

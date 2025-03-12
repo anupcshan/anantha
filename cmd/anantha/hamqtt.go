@@ -369,7 +369,7 @@ func (h *HAMQTT) Run() {
 			TemperatureHighStateTopic:   fmt.Sprintf("%s/zone/1/temp_high/current", h.topicPrefix),
 			PresetModeCommandTopic:      fmt.Sprintf("%s/zone/1/preset_mode/set", h.topicPrefix),
 			PresetModeStateTopic:        fmt.Sprintf("%s/zone/1/preset_mode/current", h.topicPrefix),
-			PresetModes:                 []string{"away", "home", "manual", "sleep", "wake"},
+			PresetModes:                 []string{"away", "home", "manual", "sleep", "wake", "vacation"},
 			ModeCommandTopic:            fmt.Sprintf("%s/mode/set", h.topicPrefix),
 			ModeStateTopic:              fmt.Sprintf("%s/mode/current", h.topicPrefix),
 			Modes:                       []string{"auto", "off", "cool", "heat", "fan_only"},

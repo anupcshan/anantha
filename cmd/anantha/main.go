@@ -23,6 +23,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/anupcshan/anantha/cmd/pkg/weather"
 	carrier "github.com/anupcshan/anantha/pb"
 	"github.com/anupcshan/anantha/tls/server"
 	"github.com/fxamacker/cbor/v2"
@@ -1062,6 +1063,24 @@ func main() {
 		now := time.Now()
 		ts := now.UnixMilli()
 
+		log.Println("Got weather request", tv.value.Details)
+
+		inputDetails := tv.value.GetDetails()
+		if len(inputDetails) != 1 {
+			return
+		}
+
+		inputDetail := inputDetails[0]
+		inputEntries := inputDetail.GetEntries()
+
+		if len(inputEntries) != 1 {
+			return
+		}
+
+		inputEntry := inputEntries[0]
+		postalCode := string(inputEntry.GetMaybeStrValue())
+
+		// Base weather entries
 		entries := []*carrier.ConfigSetting{
 			{
 				Name:            "temp_units",
@@ -1089,36 +1108,38 @@ func main() {
 			},
 		}
 
+		// Fetch weather forecast
+		forecast, err := weather.GetForecastDataByPostalCode(postalCode)
+		if err != nil {
+			log.Printf("Failed to get weather data: %v", err)
+			return
+		}
+
+		// Add forecast entries for each day
 		for i := 0; i <= 5; i++ {
+			var dayData weather.ForecastDay
+			if i >= len(forecast) {
+				// Use last day's data if we don't have enough days
+				dayData = forecast[len(forecast)-1]
+			} else {
+				dayData = forecast[i]
+			}
+
 			entries = append(entries, []*carrier.ConfigSetting{
 				{
 					Name:            fmt.Sprintf("%d/pop", i),
 					ConfigType:      carrier.ConfigType_CT_UINT16,
 					TimestampMillis: ts,
 					Value: &carrier.ConfigSetting_IntValue{
-						IntValue: 0,
+						IntValue: int32(dayData.Precipitation),
 					},
 				},
 				{
-					// 1  -> thunderstorms
-					// 2  -> sleet
-					// 3  -> rain and sleet
-					// 4  -> wintry mix
-					// 5  -> rain and snow
-					// 6  -> snow
-					// 7  -> freezing rain
-					// 8  -> rain
-					// 9  -> blizzard
-					// 10 -> fog
-					// 11 -> cloudy
-					// 12 -> partly cloudy
-					// 13 -> mostly cloudy
-					// 14 -> clear
 					Name:            fmt.Sprintf("%d/status_id", i),
 					ConfigType:      carrier.ConfigType_CT_UINT16,
 					TimestampMillis: ts,
 					Value: &carrier.ConfigSetting_IntValue{
-						IntValue: 14,
+						IntValue: int32(dayData.StatusID),
 					},
 				},
 				{
@@ -1126,7 +1147,7 @@ func main() {
 					ConfigType:      carrier.ConfigType_CT_TEMP,
 					TimestampMillis: ts,
 					Value: &carrier.ConfigSetting_IntValue{
-						IntValue: 23,
+						IntValue: int32(dayData.MaxTemp),
 					},
 				},
 				{
@@ -1134,7 +1155,7 @@ func main() {
 					ConfigType:      carrier.ConfigType_CT_TEMP,
 					TimestampMillis: ts,
 					Value: &carrier.ConfigSetting_IntValue{
-						IntValue: 12,
+						IntValue: int32(dayData.MinTemp),
 					},
 				},
 			}...)

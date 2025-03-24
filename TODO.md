@@ -16,7 +16,7 @@
   After a firmware update, we need to change the cert being presented by anantha to allow thermostat to connect.
 - [ ] Better proto cleanup. We dump protobufs sent by thermostat in a directory which gets garbage collected on process startup.
   Do this on a schedule or as required.
-- [ ] Weather integration with Open Meteo? Currently, we pretend to be in a California summer all year round.
+- [x] Weather integration with Open Meteo? Currently, we pretend to be in a California summer all year round.
 - [ ] Perform firmware patching via auto-update mechanism within the thermostat. Could be a way to onboard without needing an SD-card to flash firmware.
   Kind of dangerous given how some bits in the thermostat cannot be overwritten once set (like AWS IOT thingname, certs etc?). Could cause
   the thermostat to potentially get "bricked" if you want to use AWS IOT/Carrier API again.

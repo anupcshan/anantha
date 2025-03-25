@@ -285,6 +285,8 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 	case packets.Connect:
 		// Empty liveClients list on CONNECT. Make sure we get a PUBLISH spBv1.0/WallCtrl/NDATA/<thingName> before polling
 		m.liveClients = map[string]struct{}{}
+	case packets.Pingreq:
+		// Don't log PINGREQ
 	default:
 		log.Printf("%s from %s", strings.ToUpper(packets.PacketNames[pk.FixedHeader.Type]), cl.ID)
 	}
@@ -1192,7 +1194,6 @@ func main() {
 					}
 				}
 				if hasLiveClient {
-					log.Printf("Polling NCMD event_update_mode_active: %+v %+v", server.Clients.Len(), server.Clients.GetAll())
 					publishProto([]*carrier.ConfigSetting{
 						{
 							Name:       "event_update_mode_active",

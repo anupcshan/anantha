@@ -31,9 +31,6 @@ func GetPrecipitationProbability(maxPrecipitationProbability int) int {
 
 // GetForecastDataByPostalCode returns formatted forecast data for all days for a specific postal code
 func GetForecastDataByPostalCode(postalCode string) ([]ForecastDay, error) {
-	if err := ValidatePostalCode(postalCode); err != nil {
-		return nil, err
-	}
 	resp, err := GetWeatherDataByPostalCode(postalCode)
 	if err != nil {
 		return nil, err
@@ -48,6 +45,16 @@ func GetForecastDataByPostalCode(postalCode string) ([]ForecastDay, error) {
 			Precipitation: GetPrecipitationProbability(resp.Daily.PrecipitationMax[i]),
 		})
 	}
+
+	// Overwrite weather code for day 0 with the current weather code.
+	//
+	// open-meteo uses the "highest" value of hourly weather codes for a day to
+	// compute the weather code for a day. This is quite misleading and not very
+	// useful.
+	//
+	// Since the thermostat displays the current weather prominently, try to make
+	// it more accurate.
+	days[0].StatusID = ConvertWeatherCode(resp.Current.WeatherCode)
 
 	return days, nil
 }

@@ -104,11 +104,14 @@ type OpenMeteoResponse struct {
 		WeatherCode      []int     `json:"weathercode"`
 		PrecipitationMax []int     `json:"precipitation_probability_max"`
 	} `json:"daily"`
+	Current struct {
+		WeatherCode int `json:"weathercode"`
+	} `json:"current"`
 }
 
 // FetchWeather gets weather data for the given coordinates
 func FetchWeather(coords Coordinates) (*OpenMeteoResponse, error) {
-	url := fmt.Sprintf("%s/forecast?latitude=%.4f&longitude=%.4f&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto",
+	url := fmt.Sprintf("%s/forecast?latitude=%.4f&longitude=%.4f&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&current=weathercode&timezone=auto",
 		openMeteoBaseURL, coords.Latitude, coords.Longitude)
 
 	resp, err := http.Get(url)

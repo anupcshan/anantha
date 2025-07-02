@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the anantha binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o anantha ./cmd/anantha
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o anantha ./cmd/anantha
 
 # Runtime stage
 FROM debian:bookworm-slim

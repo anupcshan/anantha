@@ -36,14 +36,10 @@ import (
 )
 
 var (
-	// Placeholder for manifest XML - embed directive removed for now
-	manifestXML = []byte(`<?xml version="1.0" encoding="UTF-8"?>
-<manifest>
-    <version>1.0</version>
-    <description>Anantha Local Control Toolkit</description>
-</manifest>`)
+	//go:embed manifest.xml
+	manifestXML []byte
 
-	// Placeholder for assets - embed directive removed for now
+	//go:embed assets
 	assets embed.FS
 )
 

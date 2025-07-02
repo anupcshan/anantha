@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+TODO.md
+*.md
+dashboard.png
+
+# Build artifacts
+anantha
+**/*.exe
+
+# Go build cache
+.cache
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test files
+*_test.go
+
+# Scripts that aren't needed in container
+*.sh
+
+# Certificate generation dumps and results
+cmd/fakeclient/dump/
+cmd/cagen/.gitignore
+cmd/signcert/.gitignore
+cmd/anantha/.gitignore
+tls/client/.gitignore
+
+# Individual certificate files that aren't core TLS
+cmd/cagen/*.pem
+
+# Docker related
+Dockerfile*
+.dockerignore
+docker-compose*
+
+# CI/CD
+.github/

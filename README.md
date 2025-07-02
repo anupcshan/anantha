@@ -20,14 +20,14 @@ This project was inspired by [Infinitude](https://github.com/nebulous/infinitude
 
 ## Installation
 
-Install the required tools:
+Install the anantha CLI tool:
 ```bash
-go install github.com/anupcshan/anantha/cmd/hexsed@latest github.com/anupcshan/anantha/cmd/anantha@latest
+go install github.com/anupcshan/anantha/cmd/anantha@latest
 ```
 
-This installs two binaries in your `$GOBIN` (typically `$HOME/go/bin`):
-- `anantha`: The main server handling HTTP/MQTT communication
-- `hexsed`: A one-time use tool for patching firmware with the CA certificate
+This installs a single binary `anantha` in your `$GOBIN` (typically `$HOME/go/bin`) with two main subcommands:
+- `anantha serve`: The main server handling HTTP/MQTT communication
+- `anantha edit-firmware`: A tool for patching firmware with the CA certificate
 
 ## Setup Instructions
 
@@ -36,18 +36,18 @@ This installs two binaries in your `$GOBIN` (typically `$HOME/go/bin`):
 1. Download your thermostat's firmware (e.g., `BINF0456.hex`)
 2. Patch the firmware:
    ```bash
-   hexsed -in original/BINF0456.hex -out updated/BINF0456.hex
+   anantha edit-firmware -in original/BINF0456.hex -out updated/BINF0456.hex
    ```
 3. Copy `updated/BINF0456.hex` to an SD card and flash it to your thermostat
 
 ### 2. Run Anantha Server
 
 ```bash
-anantha \
-  -ntp-addr <NTP_IP> \                           # NTP server IP (e.g., 192.168.86.1)
-  -ha-mqtt-addr <HA_MQTT_IP> \                   # Home Assistant MQTT server IP
-  -ha-mqtt-topic-prefix <HA_MQTT_TOPIC_PREFIX> \ # e.g., hvac/carrier
-  -client-id <THERMOSTAT_DEVICE_ID>              # Your Thermostat Serial ID
+anantha serve \
+  --ntp-addr <NTP_IP> \                           # NTP server IP (e.g., 192.168.86.1)
+  --ha-mqtt-addr <HA_MQTT_IP> \                   # Home Assistant MQTT server IP
+  --ha-mqtt-topic-prefix <HA_MQTT_TOPIC_PREFIX> \ # e.g., hvac/carrier
+  --client-id <THERMOSTAT_DEVICE_ID>              # Your Thermostat Serial ID
 ```
 
 ### 3. Configure Thermostat

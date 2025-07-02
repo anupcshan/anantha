@@ -27,7 +27,9 @@ Example:
 func init() {
 	editFirmwareCmd.Flags().StringP("in", "i", "", "Input hex file (required)")
 	editFirmwareCmd.Flags().StringP("out", "o", "", "Output hex file (required)")
+	//nolint:errcheck
 	editFirmwareCmd.MarkFlagRequired("in")
+	//nolint:errcheck
 	editFirmwareCmd.MarkFlagRequired("out")
 }
 

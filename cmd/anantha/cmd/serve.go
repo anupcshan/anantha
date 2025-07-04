@@ -335,6 +335,8 @@ func init() {
 	serveCmd.Flags().String("ntp-addr", "", "NTP IPv4 Address (if unset, we won't respond to DNS requests for *.ntp.org)")
 	serveCmd.Flags().String("ha-mqtt-addr", "", "Home Assistant MQTT Host")
 	serveCmd.Flags().String("ha-mqtt-topic-prefix", "", "Home Assistant MQTT Topic Prefix")
+	serveCmd.Flags().String("ha-mqtt-username", "", "Home Assistant MQTT Username")
+	serveCmd.Flags().String("ha-mqtt-password", "", "Home Assistant MQTT Password")
 	serveCmd.Flags().String("reqs-dir", "$HOME/.anantha/protos", "Directory where request protos are stored")
 	serveCmd.Flags().String("client-id", "", "MQTT Client ID (this should be the same as the HVAC device ID, e.g. '4123X123456')")
 	serveCmd.Flags().String("thing-name-override", "", "Thingname override - you should never need to set this")
@@ -345,6 +347,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 	ntpAddrStr, _ := cmd.Flags().GetString("ntp-addr")
 	haMQTTAddr, _ := cmd.Flags().GetString("ha-mqtt-addr")
 	haMQTTTopicPrefix, _ := cmd.Flags().GetString("ha-mqtt-topic-prefix")
+	haMQTTUsername, _ := cmd.Flags().GetString("ha-mqtt-username")
+	haMQTTPassword, _ := cmd.Flags().GetString("ha-mqtt-password")
 	protosDir, _ := cmd.Flags().GetString("reqs-dir")
 	clientID, _ := cmd.Flags().GetString("client-id")
 	thingNameOverride, _ := cmd.Flags().GetString("thing-name-override")
@@ -931,7 +935,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		})
 	})
 
-	haMQTT := NewHAMQTT(haMQTTAddr, haMQTTTopicPrefix, loadedValues, publishProto)
+	haMQTT := NewHAMQTT(haMQTTAddr, haMQTTTopicPrefix, haMQTTUsername, haMQTTPassword, clientID, loadedValues, publishProto)
 	go haMQTT.Run()
 
 	go func() {

@@ -13,16 +13,22 @@ import (
 type HAMQTT struct {
 	addr         string
 	topicPrefix  string
+	username     string
+	password     string
+	clientID     string
 	loadedValues *LoadedValues
 
 	sendCommand func([]*carrier.ConfigSetting)
 	mqttClient  mqtt_paho.Client
 }
 
-func NewHAMQTT(addr string, topicPrefix string, loadedValues *LoadedValues, sendCommand func([]*carrier.ConfigSetting)) *HAMQTT {
+func NewHAMQTT(addr string, topicPrefix string, username string, password string, clientID string, loadedValues *LoadedValues, sendCommand func([]*carrier.ConfigSetting)) *HAMQTT {
 	return &HAMQTT{
 		addr:         addr,
 		topicPrefix:  topicPrefix,
+		username:     username,
+		password:     password,
+		clientID:     clientID,
 		loadedValues: loadedValues,
 		sendCommand:  sendCommand,
 	}
@@ -115,9 +121,12 @@ func (h *HAMQTT) Run() {
 		return
 	}
 
-	h.mqttClient = mqtt_paho.NewClient(
-		mqtt_paho.NewClientOptions().AddBroker(h.addr),
-	)
+	var clientOptions = mqtt_paho.NewClientOptions().AddBroker(h.addr)
+	if h.username != "" && h.password != "" {
+		clientOptions.SetUsername(h.username)
+		clientOptions.SetPassword(h.password)
+	}
+	h.mqttClient = mqtt_paho.NewClient(clientOptions)
 
 	log.Printf("Connecting to %s", h.addr)
 	if token := h.mqttClient.Connect(); token.Wait() && token.Error() != nil {
@@ -356,6 +365,7 @@ func (h *HAMQTT) Run() {
 			ModeCommandTopic            string   `json:"mode_command_topic"`
 			ModeStateTopic              string   `json:"mode_state_topic"`
 			Modes                       []string `json:"modes"`
+			UniqueID                    string   `json:"unique_id"`
 		}{
 			Name:                        "carrier",
 			ActionTopic:                 fmt.Sprintf("%s/action/current", h.topicPrefix),
@@ -373,6 +383,7 @@ func (h *HAMQTT) Run() {
 			ModeCommandTopic:            fmt.Sprintf("%s/mode/set", h.topicPrefix),
 			ModeStateTopic:              fmt.Sprintf("%s/mode/current", h.topicPrefix),
 			Modes:                       []string{"auto", "off", "cool", "heat", "fan_only"},
+			UniqueID:                    h.clientID,
 		}
 		discoveryMsgJSON, err := json.Marshal(discoveryMsg)
 		if err != nil {

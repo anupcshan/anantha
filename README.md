@@ -47,6 +47,8 @@ anantha serve \
   --ntp-addr <NTP_IP> \                           # NTP server IP (e.g., 192.168.86.1)
   --ha-mqtt-addr <HA_MQTT_IP> \                   # Home Assistant MQTT server IP
   --ha-mqtt-topic-prefix <HA_MQTT_TOPIC_PREFIX> \ # e.g., hvac/carrier
+  --ha-mqtt-username <HA_MQTT_USERNAME> \         # Home Assistant MQTT username
+  --ha-mqtt-password <HA_MQTT_PASSWORD> \         # Home Assistant MQTT password
   --client-id <THERMOSTAT_DEVICE_ID>              # Your Thermostat Serial ID
 ```
 

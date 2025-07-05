@@ -81,6 +81,7 @@ Known working devices and firmware versions:
 |-------------|-------|------------------|
 | Carrier | SYSTXCCITC01-B | v4.47 |
 | Carrier | SYSTXCCITC01-B | v4.56 |
+| Carrier | SYSTXCCITC01-B | v4.74 |
 
 ## Technical Details
 

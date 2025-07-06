@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"sync"
@@ -15,6 +18,7 @@ import (
 
 type TimestampedValue struct {
 	value       *carrier.ConfigSetting
+	sourceFile  string
 	lastUpdated time.Time
 }
 
@@ -66,18 +70,52 @@ type RegexSub struct {
 	re *regexp.Regexp
 }
 
+type sourceFileStats struct {
+	loadingInProgress bool
+	liveReferences    int
+}
+
 type LoadedValues struct {
-	values map[string]TimestampedValue
-	lock   sync.Mutex
+	values          map[string]TimestampedValue
+	sourceFileUsage map[string]*sourceFileStats
+	lock            sync.Mutex
 
 	globalLastUpdated time.Time
 
 	subscriptions       map[string][]chan TimestampedValue
 	regexSubscriptions  []RegexSub
 	globalSubscriptions []chan time.Time
+
+	// Proto directory and deletion queue for garbage collection
+	protosDir     string
+	deletionQueue chan string
 }
 
-func (l *LoadedValues) Update(k string, v *carrier.ConfigSetting, ts time.Time) bool {
+func (l *LoadedValues) StartLoading(sourceFilename string) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	if stats, ok := l.sourceFileUsage[sourceFilename]; ok {
+		stats.loadingInProgress = true
+	} else {
+		l.sourceFileUsage[sourceFilename] = &sourceFileStats{loadingInProgress: true}
+	}
+}
+
+func (l *LoadedValues) EndLoading(sourceFilename string) {
+	l.lock.Lock()
+	l.sourceFileUsage[sourceFilename].loadingInProgress = false
+
+	// If this file has no references after loading, mark it for deletion
+	if stats := l.sourceFileUsage[sourceFilename]; stats.liveReferences == 0 && l.deletionQueue != nil {
+		l.lock.Unlock()
+		l.deletionQueue <- sourceFilename
+	} else {
+		l.lock.Unlock()
+	}
+}
+
+func (l *LoadedValues) Update(k string, v *carrier.ConfigSetting, ts time.Time, sourceFilename string) bool {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
@@ -96,12 +134,23 @@ func (l *LoadedValues) Update(k string, v *carrier.ConfigSetting, ts time.Time) 
 		if existing.lastUpdated.After(ts) {
 			return false
 		}
+
+		stats := l.sourceFileUsage[existing.sourceFile]
+		stats.liveReferences--
+
+		// If this file has no more references and is not being loaded, mark it for deletion
+		if stats.liveReferences == 0 && !stats.loadingInProgress && l.deletionQueue != nil {
+			l.deletionQueue <- existing.sourceFile
+		}
 	}
 
 	l.values[k] = TimestampedValue{
 		value:       v,
 		lastUpdated: ts,
+		sourceFile:  sourceFilename,
 	}
+
+	l.sourceFileUsage[sourceFilename].liveReferences++
 
 	for _, sub := range l.subscriptions[k] {
 		select {
@@ -286,9 +335,40 @@ func (l *LoadedValues) RecentEntries() []TimestampedValue {
 	return result
 }
 
-func NewLoadedValues() *LoadedValues {
-	return &LoadedValues{
-		values:        map[string]TimestampedValue{},
-		subscriptions: map[string][]chan TimestampedValue{},
+func (l *LoadedValues) RemoveFileReferences(filename string) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	delete(l.sourceFileUsage, filename)
+}
+
+func (l *LoadedValues) deletionWorker() {
+	for filename := range l.deletionQueue {
+		fullPath := filepath.Join(l.protosDir, filename)
+		if err := os.Remove(fullPath); err != nil {
+			if !os.IsNotExist(err) {
+				log.Printf("Error removing unreferenced proto file %s: %v", filename, err)
+			}
+		} else {
+			log.Printf("Removed unreferenced proto file: %s", filename)
+			l.RemoveFileReferences(filename)
+		}
 	}
+}
+
+func NewLoadedValues(protosDir string) *LoadedValues {
+	deletionQueue := make(chan string, 100) // Buffered channel to avoid blocking
+
+	l := &LoadedValues{
+		values:          map[string]TimestampedValue{},
+		sourceFileUsage: map[string]*sourceFileStats{},
+		subscriptions:   map[string][]chan TimestampedValue{},
+		protosDir:       protosDir,
+		deletionQueue:   deletionQueue,
+	}
+
+	// Start deletion worker goroutine
+	go l.deletionWorker()
+
+	return l
 }

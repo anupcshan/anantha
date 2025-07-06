@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -72,15 +73,13 @@ func (m *MQTTLogger) Provides(b byte) bool {
 	return true
 }
 
-func addAllConfigSettings(ct *carrier.CarrierInfo, loadedValues *LoadedValues) int {
-	var updated int
+func addAllConfigSettings(ct *carrier.CarrierInfo, loadedValues *LoadedValues, sourceFileName string) {
+	loadedValues.StartLoading(sourceFileName)
 	for _, setting := range ct.ConfigSettings {
-		if loadedValues.Update(setting.Name, setting, time.UnixMilli(ct.TimestampMillis)) {
-			updated++
-		}
-	}
+		loadedValues.Update(setting.Name, setting, time.UnixMilli(ct.TimestampMillis), sourceFileName)
 
-	return updated
+	}
+	loadedValues.EndLoading(sourceFileName)
 }
 
 func (m *MQTTLogger) toIOTTopic(topic string) string {
@@ -100,13 +99,9 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 			// Client sent initial PUBLISH - ready to poll it
 			m.liveClients[cl.ID] = struct{}{}
 		}
+		protoFilename := fmt.Sprintf("%s-%s.pb", strings.ReplaceAll(string(pk.TopicName), "/", "_"), time.Now().Format(time.RFC3339Nano))
 		if err := os.WriteFile(
-			fmt.Sprintf(
-				"%s/%s-%s.pb",
-				m.savedProtosDir,
-				strings.ReplaceAll(string(pk.TopicName), "/", "_"),
-				time.Now().Format(time.RFC3339Nano),
-			),
+			filepath.Join(m.savedProtosDir, protoFilename),
 			pk.Payload,
 			0644,
 		); err != nil {
@@ -117,7 +112,7 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 			log.Printf("Failed to unmarshal: %s", err)
 		}
 
-		addAllConfigSettings(&ct, m.loadedValues)
+		addAllConfigSettings(&ct, m.loadedValues, protoFilename)
 
 		if m.iotMQTTClient != nil {
 			iotTopic := m.toIOTTopic(pk.TopicName)
@@ -358,8 +353,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	var shutdownFuncs []func()
 
-	loadedValues := NewLoadedValues()
-
 	cmdTopic := fmt.Sprintf("spBv1.0/WallCtrl/NCMD/%s", clientID)
 	if thingNameOverride != "" {
 		cmdTopic = fmt.Sprintf("spBv1.0/WallCtrl/NCMD/%s", thingNameOverride)
@@ -514,6 +507,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create proto dump directory: %w", err)
 	}
 
+	loadedValues := NewLoadedValues(savedProtosDir)
+
 	dirents, err := os.ReadDir(savedProtosDir)
 	if err != nil {
 		return fmt.Errorf("failed to list directory: %w", err)
@@ -559,12 +554,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
-		if updated := addAllConfigSettings(&cInfo, loadedValues); updated <= 0 {
-			log.Printf("File %s had no new records - deleting", f)
-			if err := os.Remove(path.Join(savedProtosDir, f)); err != nil {
-				return fmt.Errorf("unable to remove file %s: %w", f, err)
-			}
-		}
+		addAllConfigSettings(&cInfo, loadedValues, f)
 	}
 
 	log.Println("Done loading all proto messages")

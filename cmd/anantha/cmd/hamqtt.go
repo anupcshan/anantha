@@ -115,25 +115,7 @@ func (h *HAMQTT) subscribe(topicSuffix string, handler func(_ mqtt_paho.Client, 
 	token.Wait()
 }
 
-func (h *HAMQTT) Run() {
-	if h.addr == "" && h.topicPrefix == "" {
-		log.Printf("Not initialiazing HA MQTT with addr=%s topicPrefix=%s", h.addr, h.topicPrefix)
-		return
-	}
-
-	var clientOptions = mqtt_paho.NewClientOptions().AddBroker(h.addr)
-	if h.username != "" && h.password != "" {
-		clientOptions.SetUsername(h.username)
-		clientOptions.SetPassword(h.password)
-	}
-	h.mqttClient = mqtt_paho.NewClient(clientOptions)
-
-	log.Printf("Connecting to %s", h.addr)
-	if token := h.mqttClient.Connect(); token.Wait() && token.Error() != nil {
-		log.Fatalf("Error connecting to MQTT: %s", token.Error())
-	}
-	log.Printf("Connected to %s", h.addr)
-
+func (h *HAMQTT) installSubscriptions() {
 	h.subscribe("mode/set",
 		func(_ mqtt_paho.Client, msg mqtt_paho.Message) {
 			log.Printf("About to set mode to %s", msg.Payload())
@@ -346,6 +328,36 @@ func (h *HAMQTT) Run() {
 			h.sendCommand(cfgSettings)
 		},
 	)
+}
+
+func (h *HAMQTT) Run() {
+	if h.addr == "" && h.topicPrefix == "" {
+		log.Printf("Not initialiazing HA MQTT with addr=%s topicPrefix=%s", h.addr, h.topicPrefix)
+		return
+	}
+
+	var clientOptions = mqtt_paho.NewClientOptions().
+		AddBroker(h.addr).
+		SetAutoReconnect(true).
+		SetClientID(h.clientID).
+		SetConnectionLostHandler(func(c mqtt_paho.Client, err error) {
+			log.Printf("MQTT connection lost: %v", err)
+		}).
+		SetOnConnectHandler(func(c mqtt_paho.Client) {
+			log.Printf("MQTT connection established to %s", h.addr)
+			h.installSubscriptions()
+		})
+	if h.username != "" && h.password != "" {
+		clientOptions.SetUsername(h.username)
+		clientOptions.SetPassword(h.password)
+	}
+	h.mqttClient = mqtt_paho.NewClient(clientOptions)
+
+	log.Printf("Connecting to %s", h.addr)
+	if token := h.mqttClient.Connect(); token.Wait() && token.Error() != nil {
+		log.Fatalf("Error connecting to MQTT: %s", token.Error())
+	}
+	log.Printf("Connected to %s", h.addr)
 
 	h.loadedValues.OnChange1("profile/serial", func(tv TimestampedValue) {
 		discoveryMsg := struct {

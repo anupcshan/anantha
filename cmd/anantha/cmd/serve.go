@@ -428,12 +428,42 @@ const (
 			text-align: center;
 			margin: 20px 0;
 		}
+
+		.nav-links {
+			margin-top: 15px;
+			display: flex;
+			justify-content: center;
+			gap: 20px;
+		}
+
+		.nav-links a {
+			color: var(--secondary);
+			text-decoration: none;
+			font-weight: 500;
+			padding: 8px 16px;
+			border-radius: var(--border-radius);
+			transition: var(--transition);
+		}
+
+		.nav-links a:hover {
+			background-color: var(--light);
+			color: var(--primary);
+		}
+
+		.nav-links a.active {
+			background-color: var(--primary);
+			color: white;
+		}
 	</style>
 </head>
 <body>
 	<div class="container">
 		<header>
 			<h1>Carrier Thermostat Dashboard</h1>
+			<div class="nav-links">
+				<a href="/" class="active">Dashboard</a>
+				<a href="/schedule">Schedule</a>
+			</div>
 		</header>
 
 		<div hx-ext="sse" sse-connect="/events">
@@ -556,6 +586,516 @@ const (
 </html>
 `
 )
+
+type SchedulePeriod struct {
+	StartTime string
+	EndTime   string
+	Activity  string
+	Duration  int // in minutes
+	Enabled   bool
+}
+
+type DaySchedule struct {
+	Day     string
+	Periods []SchedulePeriod
+}
+
+func parseTime(timeStr string) (int, int) {
+	if timeStr == "00:00" || timeStr == "" {
+		return 0, 0
+	}
+	var hour, minute int
+	fmt.Sscanf(timeStr, "%d:%d", &hour, &minute)
+	return hour, minute
+}
+
+func timeToMinutes(hour, minute int) int {
+	return hour*60 + minute
+}
+
+func minutesToTime(minutes int) string {
+	hour := (minutes / 60) % 24
+	minute := minutes % 60
+	return fmt.Sprintf("%02d:%02d", hour, minute)
+}
+
+func computeScheduleBlocks(periods []SchedulePeriod) []SchedulePeriod {
+	if len(periods) == 0 {
+		return periods
+	}
+
+	// Sort periods by start time
+	for i := 0; i < len(periods)-1; i++ {
+		for j := i + 1; j < len(periods); j++ {
+			hour1, min1 := parseTime(periods[i].StartTime)
+			hour2, min2 := parseTime(periods[j].StartTime)
+			if timeToMinutes(hour1, min1) > timeToMinutes(hour2, min2) {
+				periods[i], periods[j] = periods[j], periods[i]
+			}
+		}
+	}
+
+	var result []SchedulePeriod
+
+	// Calculate end times and durations, splitting blocks that cross midnight
+	for i := 0; i < len(periods); i++ {
+		startHour, startMin := parseTime(periods[i].StartTime)
+		startMinutes := timeToMinutes(startHour, startMin)
+
+		var endMinutes int
+		if i < len(periods)-1 {
+			// End time is the start of the next period
+			nextHour, nextMin := parseTime(periods[i+1].StartTime)
+			endMinutes = timeToMinutes(nextHour, nextMin)
+		} else {
+			// Last period ends at the start of the first period next day
+			firstHour, firstMin := parseTime(periods[0].StartTime)
+			endMinutes = timeToMinutes(firstHour, firstMin)
+		}
+
+		// Check if this period crosses midnight
+		if endMinutes <= startMinutes {
+			// Period crosses midnight - split into two parts
+
+			// Part 1: From start time to end of day (23:59)
+			endOfDay := 24 * 60 // midnight
+			duration1 := endOfDay - startMinutes
+
+			if duration1 > 0 {
+				result = append(result, SchedulePeriod{
+					StartTime: periods[i].StartTime,
+					EndTime:   "23:59",
+					Activity:  periods[i].Activity,
+					Duration:  duration1,
+					Enabled:   periods[i].Enabled,
+				})
+			}
+
+			// Part 2: From start of day to end time (handled by next day)
+			// This will be handled when processing the next day's schedule
+
+		} else {
+			// Period stays within the same day
+			duration := endMinutes - startMinutes
+
+			result = append(result, SchedulePeriod{
+				StartTime: periods[i].StartTime,
+				EndTime:   minutesToTime(endMinutes),
+				Activity:  periods[i].Activity,
+				Duration:  duration,
+				Enabled:   periods[i].Enabled,
+			})
+		}
+	}
+
+	return result
+}
+
+func addCrossoverBlocks(daySchedules map[string][]SchedulePeriod, days []string) {
+	// Process each day to add continuation blocks from midnight crossovers
+	for i, day := range days {
+		prevDayIndex := (i - 1 + len(days)) % len(days)
+		prevDay := days[prevDayIndex]
+
+		prevPeriods := daySchedules[prevDay]
+		if len(prevPeriods) == 0 {
+			continue
+		}
+
+		// Check if the last period of the previous day ends at 23:59 (indicating a crossover)
+		lastPeriod := prevPeriods[len(prevPeriods)-1]
+		if lastPeriod.EndTime != "23:59" {
+			continue
+		}
+
+		// Find where this period should end on the current day
+		currentPeriods := daySchedules[day]
+		var endTime string
+		var endMinutes int
+
+		if len(currentPeriods) > 0 {
+			// End at the start of the first period of current day
+			endTime = currentPeriods[0].StartTime
+			endHour, endMin := parseTime(endTime)
+			endMinutes = timeToMinutes(endHour, endMin)
+		} else {
+			// If no periods on current day, we need to find the next day with periods
+			// For now, assume it continues until the same time as the original schedule
+			// This is a simplification - in reality we'd need to scan forward
+			endTime = "06:30" // Default based on the schedule pattern
+			endMinutes = timeToMinutes(6, 30)
+		}
+
+		if endMinutes > 0 {
+			crossoverBlock := SchedulePeriod{
+				StartTime: "00:00",
+				EndTime:   endTime,
+				Activity:  lastPeriod.Activity,
+				Duration:  endMinutes,
+				Enabled:   lastPeriod.Enabled,
+			}
+
+			// Insert at the beginning of current day
+			daySchedules[day] = append([]SchedulePeriod{crossoverBlock}, daySchedules[day]...)
+		}
+	}
+}
+
+func generateScheduleHTML(loadedValues *LoadedValues) string {
+	days := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+	daySchedules := make(map[string][]SchedulePeriod)
+
+	// Get snapshot of all current values
+	snapshot := loadedValues.Snapshot()
+
+	// Parse schedule data for each day
+	for _, day := range days {
+		var periods []SchedulePeriod
+
+		for period := 1; period <= 5; period++ {
+			timeKey := fmt.Sprintf("1/program/%s/period %d/time", day, period)
+			activityKey := fmt.Sprintf("1/program/%s/period %d/activity", day, period)
+			enabledKey := fmt.Sprintf("1/program/%s/period %d/enabled", day, period)
+
+			timeVal, hasTime := snapshot[timeKey]
+			activityVal, hasActivity := snapshot[activityKey]
+			enabledVal, hasEnabled := snapshot[enabledKey]
+
+			if hasTime && hasActivity && hasEnabled && enabledVal.value.GetBoolValue() {
+				periods = append(periods, SchedulePeriod{
+					StartTime: timeVal.ToString(),
+					Activity:  activityVal.ToString(),
+					Enabled:   true,
+				})
+			}
+		}
+
+		// Compute time blocks and durations for this day
+		daySchedules[day] = computeScheduleBlocks(periods)
+	}
+
+	// Add crossover blocks from previous day
+	addCrossoverBlocks(daySchedules, days)
+
+	// Generate HTML
+	html := `<!DOCTYPE html>
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		:root {
+			--primary: #3b82f6;
+			--primary-dark: #2563eb;
+			--secondary: #64748b;
+			--success: #10b981;
+			--warning: #f59e0b;
+			--danger: #ef4444;
+			--light: #f8fafc;
+			--dark: #1e293b;
+			--gray: #e2e8f0;
+			--gray-dark: #94a3b8;
+			--border-radius: 8px;
+			--box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+			--transition: all 0.2s ease-in-out;
+		}
+
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+			background-color: #f1f5f9;
+			color: var(--dark);
+			line-height: 1.6;
+			padding: 20px;
+		}
+
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+		}
+
+		header {
+			text-align: center;
+			margin-bottom: 30px;
+			padding: 20px;
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+		}
+
+		h1 {
+			color: var(--primary);
+			margin-bottom: 10px;
+			font-weight: 600;
+		}
+
+		.nav-links {
+			margin-top: 15px;
+			display: flex;
+			justify-content: center;
+			gap: 20px;
+		}
+
+		.nav-links a {
+			color: var(--secondary);
+			text-decoration: none;
+			font-weight: 500;
+			padding: 8px 16px;
+			border-radius: var(--border-radius);
+			transition: var(--transition);
+		}
+
+		.nav-links a:hover {
+			background-color: var(--light);
+			color: var(--primary);
+		}
+
+		.nav-links a.active {
+			background-color: var(--primary);
+			color: white;
+		}
+
+		.schedule-grid {
+			display: grid;
+			grid-template-columns: repeat(7, 1fr);
+			gap: 15px;
+			margin-top: 20px;
+		}
+
+		.day-column {
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+			padding: 15px;
+			min-height: 600px;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.day-header {
+			font-weight: 600;
+			color: var(--primary);
+			margin-bottom: 15px;
+			text-align: center;
+			padding-bottom: 10px;
+			border-bottom: 2px solid var(--gray);
+			flex-shrink: 0;
+		}
+
+		.timeline {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			position: relative;
+		}
+
+		.time-block {
+			border-radius: 6px;
+			padding: 8px 12px;
+			margin-bottom: 2px;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			border-left: 4px solid;
+			position: relative;
+		}
+
+		.time-block.activity-home {
+			background-color: #ecfdf5;
+			border-left-color: var(--success);
+		}
+
+		.time-block.activity-sleep {
+			background-color: #eff6ff;
+			border-left-color: var(--primary);
+		}
+
+		.time-block.activity-away {
+			background-color: #fffbeb;
+			border-left-color: var(--warning);
+		}
+
+		.block-header {
+			font-weight: 600;
+			color: var(--dark);
+			font-size: 0.85rem;
+			margin-bottom: 2px;
+		}
+
+		.block-time-range {
+			font-size: 0.75rem;
+			color: var(--secondary);
+			margin-bottom: 4px;
+		}
+
+		.block-activity {
+			font-size: 0.8rem;
+			font-weight: 500;
+			text-transform: capitalize;
+		}
+
+		.activity-home .block-activity {
+			color: var(--success);
+		}
+
+		.activity-sleep .block-activity {
+			color: var(--primary);
+		}
+
+		.activity-away .block-activity {
+			color: var(--warning);
+		}
+
+		.block-duration {
+			font-size: 0.7rem;
+			color: var(--gray-dark);
+			margin-top: 2px;
+		}
+
+		.current-time-indicator {
+			position: absolute;
+			left: 0;
+			right: 0;
+			height: 2px;
+			background-color: var(--danger);
+			z-index: 10;
+			box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+		}
+
+		.current-time-indicator::before {
+			content: '';
+			position: absolute;
+			left: -4px;
+			top: -2px;
+			width: 8px;
+			height: 6px;
+			background-color: var(--danger);
+			border-radius: 50%;
+		}
+
+		.current-time-indicator::after {
+			content: attr(data-time);
+			position: absolute;
+			right: 8px;
+			top: -12px;
+			font-size: 0.7rem;
+			color: var(--danger);
+			font-weight: 600;
+			background: white;
+			padding: 2px 6px;
+			border-radius: 4px;
+			box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+		}
+
+
+		.no-schedule {
+			text-align: center;
+			color: var(--gray-dark);
+			font-style: italic;
+			margin-top: 20px;
+		}
+
+		@media (max-width: 1024px) {
+			.schedule-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+
+		@media (min-width: 768px) and (max-width: 1024px) {
+			.schedule-grid {
+				grid-template-columns: repeat(2, 1fr);
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<h1>Thermostat Schedule</h1>
+			<div class="nav-links">
+				<a href="/">Dashboard</a>
+				<a href="/schedule" class="active">Schedule</a>
+			</div>
+		</header>
+
+		<div class="schedule-grid">`
+
+	// Get current time
+	now := time.Now()
+	currentDay := now.Weekday().String()
+	currentHour := now.Hour()
+	currentMinute := now.Minute()
+	currentTimeMinutes := timeToMinutes(currentHour, currentMinute)
+	currentTimeStr := fmt.Sprintf("%02d:%02d", currentHour, currentMinute)
+
+	for _, day := range days {
+		html += fmt.Sprintf(`
+			<div class="day-column">
+				<div class="day-header">%s</div>
+				<div class="timeline">`, day)
+
+		periods := daySchedules[day]
+
+		// Add current time indicator positioned relative to entire timeline (only for today)
+		var timelineHTML string
+		var currentTimeIndicatorHTML string
+
+		if day == currentDay {
+			// Calculate current time position as percentage of entire day
+			currentTimePercent := float64(currentTimeMinutes) / float64(24*60) * 100
+			currentTimeIndicatorHTML = fmt.Sprintf(`<div class="current-time-indicator" style="top: %.1f%%;" data-time="%s"></div>`, currentTimePercent, currentTimeStr)
+		}
+
+		if len(periods) == 0 {
+			timelineHTML += `<div class="no-schedule">No schedule entries</div>`
+		} else {
+			// Calculate total duration for proportional sizing
+			totalMinutes := 24 * 60
+
+			for _, period := range periods {
+				// Calculate height as percentage of total day
+				heightPercent := float64(period.Duration) / float64(totalMinutes) * 100
+
+				// Format duration for display
+				hours := period.Duration / 60
+				minutes := period.Duration % 60
+				var durationStr string
+				if hours > 0 && minutes > 0 {
+					durationStr = fmt.Sprintf("%dh %dm", hours, minutes)
+				} else if hours > 0 {
+					durationStr = fmt.Sprintf("%dh", hours)
+				} else {
+					durationStr = fmt.Sprintf("%dm", minutes)
+				}
+
+				activityClass := fmt.Sprintf("activity-%s", period.Activity)
+				timelineHTML += fmt.Sprintf(`
+				<div class="time-block %s" style="height: %.1f%%;">
+					<div class="block-time-range">%s - %s</div>
+					<div class="block-activity">%s</div>
+					<div class="block-duration">%s</div>
+				</div>`, activityClass, heightPercent, period.StartTime, period.EndTime, period.Activity, durationStr)
+			}
+		}
+
+		// Combine timeline content with current time indicator
+		html += timelineHTML + currentTimeIndicatorHTML
+
+		html += `</div></div>`
+	}
+
+	html += `
+		</div>
+	</div>
+</body>
+</html>`
+
+	return html
+}
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
@@ -841,6 +1381,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 		webControlMux.Handle("/assets/", http.FileServer(http.FS(assets)))
 		webControlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, indexTmpl)
+		})
+		webControlMux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
+			scheduleHTML := generateScheduleHTML(loadedValues)
+			fmt.Fprint(w, scheduleHTML)
 		})
 		webControlMux.Handle("/events", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")

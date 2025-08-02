@@ -214,99 +214,343 @@ const (
 <head>
 	<script src="/assets/htmx.org@1.9.12/dist/htmx.min.js"></script>
 	<script src="/assets/htmx.org@1.9.12/dist/ext/sse.js"></script>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<style>
-	table, th, td {
-		border: 1px solid black;
-		border-collapse: collapse;
-		padding: 5px;
-		text-align: center;
-	}
+		:root {
+			--primary: #3b82f6;
+			--primary-dark: #2563eb;
+			--secondary: #64748b;
+			--success: #10b981;
+			--warning: #f59e0b;
+			--danger: #ef4444;
+			--light: #f8fafc;
+			--dark: #1e293b;
+			--gray: #e2e8f0;
+			--gray-dark: #94a3b8;
+			--border-radius: 8px;
+			--box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+			--transition: all 0.2s ease-in-out;
+		}
+
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+			background-color: #f1f5f9;
+			color: var(--dark);
+			line-height: 1.6;
+			padding: 20px;
+		}
+
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+		}
+
+		header {
+			text-align: center;
+			margin-bottom: 30px;
+			padding: 20px;
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+		}
+
+		h1 {
+			color: var(--primary);
+			margin-bottom: 10px;
+			font-weight: 600;
+		}
+
+		.last-updated {
+			color: var(--secondary);
+			font-size: 0.9rem;
+		}
+
+		.section-title {
+			font-size: 1.2rem;
+			font-weight: 600;
+			margin: 25px 0 15px 0;
+			color: var(--dark);
+			padding-bottom: 8px;
+			border-bottom: 2px solid var(--gray);
+		}
+
+		.grid {
+			display: grid;
+			gap: 20px;
+		}
+
+		.grid-cols-1 { grid-template-columns: 1fr; }
+		.grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+		.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+
+		.card {
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+			padding: 20px;
+			transition: var(--transition);
+		}
+
+		.card:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+		}
+
+		.card-header {
+			font-weight: 600;
+			margin-bottom: 15px;
+			color: var(--primary);
+			font-size: 1.1rem;
+		}
+
+		.data-grid {
+			display: grid;
+			gap: 15px;
+		}
+
+		.data-item {
+			display: flex;
+			flex-direction: column;
+		}
+
+		.data-label {
+			font-size: 0.85rem;
+			color: var(--secondary);
+			margin-bottom: 5px;
+		}
+
+		.data-value {
+			font-weight: 600;
+			font-size: 1.1rem;
+			color: var(--dark);
+		}
+
+		.status-indicator {
+			display: inline-block;
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			margin-right: 8px;
+		}
+
+		.status-online {
+			background-color: var(--success);
+		}
+
+		.status-offline {
+			background-color: var(--gray-dark);
+		}
+
+		.temp-value {
+			color: var(--primary);
+		}
+
+		.humidity-value {
+			color: var(--warning);
+		}
+
+		.conditioning-heating {
+			color: var(--danger);
+		}
+
+		.conditioning-cooling {
+			color: var(--primary);
+		}
+
+		.conditioning-off {
+			color: var(--gray-dark);
+		}
+
+		/* Responsive design */
+		@media (max-width: 768px) {
+			.grid-cols-2, .grid-cols-3 {
+				grid-template-columns: 1fr;
+			}
+
+			body {
+				padding: 10px;
+			}
+
+			.card {
+				padding: 15px;
+			}
+		}
+
+		@media (min-width: 769px) and (max-width: 1024px) {
+			.grid-cols-3 {
+				grid-template-columns: repeat(2, 1fr);
+			}
+		}
+
+		/* Loading state */
+		.data-value[sse-swap="Pending"] {
+			color: var(--gray-dark);
+			font-style: italic;
+		}
+
+		/* Tables for detailed data */
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			margin-top: 10px;
+		}
+
+		th, td {
+			padding: 12px 15px;
+			text-align: left;
+			border-bottom: 1px solid var(--gray);
+		}
+
+		th {
+			background-color: #f8fafc;
+			font-weight: 600;
+			color: var(--secondary);
+			font-size: 0.85rem;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+		}
+
+		tr:hover {
+			background-color: #f8fafc;
+		}
+
+		/* Zone name styling */
+		.zone-name {
+			font-size: 1.3rem;
+			font-weight: 600;
+			color: var(--primary-dark);
+			text-align: center;
+			margin: 20px 0;
+		}
 	</style>
 </head>
 <body>
-	<div hx-ext="sse" sse-connect="/events">
-		<div>Last updated: <span sse-swap="last-updated">Never</span></div><br/>
-		<table>
-			<tr>
-				<th>Outside Temp</th>
-				<th>Mode</th>
-			</tr>
-			<tr>
-				<td sse-swap="system/oat">Pending</td>
-				<td sse-swap="system/mode">Pending</td>
-			</tr>
-		</table>
+	<div class="container">
+		<header>
+			<h1>Carrier Thermostat Dashboard</h1>
+			<div class="last-updated">Last updated: <span sse-swap="last-updated">Never</span></div>
+		</header>
 
-		<br/>
+		<div hx-ext="sse" sse-connect="/events">
+			<!-- System Overview Card -->
+			<div class="section-title">System Overview</div>
+			<div class="grid grid-cols-2">
+				<div class="card">
+					<div class="data-grid grid-cols-2">
+						<div class="data-item">
+							<div class="data-label">Outside Temperature</div>
+							<div class="data-value temp-value" sse-swap="system/oat">Pending</div>
+						</div>
+						<div class="data-item">
+							<div class="data-label">System Mode</div>
+							<div class="data-value" sse-swap="system/mode">Pending</div>
+						</div>
+					</div>
+				</div>
 
-		<div><b sse-swap="1/name">Zone Name Pending</b></div><br/>
+				<div class="card">
+					<div class="data-item">
+						<div class="data-label">Zone</div>
+						<div class="zone-name" sse-swap="1/name">Zone Name Pending</div>
+					</div>
+				</div>
+			</div>
 
-		<table>
-			<tr>
-				<th>Temp</th>
-				<th>Humidity</th>
-				<th>Current Activity</th>
-				<th>Conditioning</th>
-				<th>Heat Setpoint</th>
-				<th>Cool Setpoint</th>
-				<th>Fan</th>
-			</tr>
-			<tr>
-				<td sse-swap="1/rt">Pending</td>
-				<td sse-swap="1/rh">Pending</td>
-				<td sse-swap="1/currentActivity">Pending</td>
-				<td sse-swap="1/zoneconditioning">Pending</td>
-				<td sse-swap="1/htsp">Pending</td>
-				<td sse-swap="1/clsp">Pending</td>
-				<td sse-swap="1/fan">Pending</td>
-			</tr>
-		</table>
+			<!-- Zone Control Card -->
+			<div class="section-title">Zone Control</div>
+			<div class="card">
+				<div class="data-grid grid-cols-2 grid-cols-3">
+					<div class="data-item">
+						<div class="data-label">Temperature</div>
+						<div class="data-value temp-value" sse-swap="1/rt">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Humidity</div>
+						<div class="data-value humidity-value" sse-swap="1/rh">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Current Activity</div>
+						<div class="data-value" sse-swap="1/currentActivity">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Conditioning</div>
+						<div class="data-value" sse-swap="1/zoneconditioning">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Heat Setpoint</div>
+						<div class="data-value" sse-swap="1/htsp">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Cool Setpoint</div>
+						<div class="data-value" sse-swap="1/clsp">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Fan Status</div>
+						<div class="data-value" sse-swap="1/fan">Pending</div>
+					</div>
+				</div>
+			</div>
 
-		<br/>
+			<!-- System Details Card -->
+			<div class="section-title">System Details</div>
+			<div class="card">
+				<div class="data-grid">
+					<table>
+						<thead>
+							<tr>
+								<th>Blower RPM</th>
+								<th>Compressor RPM</th>
+								<th>Power (W)</th>
+								<th>Airflow (CFM)</th>
+								<th>Status</th>
+								<th>Mode</th>
+								<th>Coil Temp</th>
+								<th>Suction Temp</th>
+								<th>Discharge Temp</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td sse-swap="blwrpm">Pending</td>
+								<td sse-swap="comprpm">Pending</td>
+								<td sse-swap="instant">Pending</td>
+								<td sse-swap="cfm">Pending</td>
+								<td sse-swap="opstat">Pending</td>
+								<td sse-swap="opmode">Pending</td>
+								<td sse-swap="oducoiltmp">Pending</td>
+								<td sse-swap="sucttemp">Pending</td>
+								<td sse-swap="dischargetmp">Pending</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
 
-		<div><b>Details</b></div><br/>
-
-		<table>
-			<tr>
-				<th>Blower RPM</th>
-				<th>Compressor RPM</th>
-				<th>Instant Power</th>
-				<th>Airflow CFM</th>
-				<th>Oper Status</th>
-				<th>Oper Mode</th>
-				<th>Coil Temp</th>
-				<th>Suction Temp</th>
-				<th>Discharge Temp</th>
-			</tr>
-			<tr>
-				<td sse-swap="blwrpm">Pending</td>
-				<td sse-swap="comprpm">Pending</td>
-				<td sse-swap="instant">Pending</td>
-				<td sse-swap="cfm">Pending</td>
-				<td sse-swap="opstat">Pending</td>
-				<td sse-swap="opmode">Pending</td>
-				<td sse-swap="oducoiltmp">Pending</td>
-				<td sse-swap="sucttemp">Pending</td>
-				<td sse-swap="dischargetmp">Pending</td>
-			</tr>
-		</table>
-
-		<br/>
-
-		<div><b>Versions</b></div><br/>
-
-		<table>
-			<tr>
-				<th>Firmware</th>
-				<th>IDU</th>
-				<th>ODU</th>
-			</tr>
-			<tr>
-				<td sse-swap="profile/firmware">Pending</td>
-				<td sse-swap="profile/iduversion">Pending</td>
-				<td sse-swap="profile/oduversion">Pending</td>
-			</tr>
-		</table>
+			<!-- Version Information Card -->
+			<div class="section-title">System Versions</div>
+			<div class="card">
+				<div class="data-grid grid-cols-3">
+					<div class="data-item">
+						<div class="data-label">Firmware</div>
+						<div class="data-value" sse-swap="profile/firmware">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">IDU Version</div>
+						<div class="data-value" sse-swap="profile/iduversion">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">ODU Version</div>
+						<div class="data-value" sse-swap="profile/oduversion">Pending</div>
+					</div>
+				</div>
+			</div>
+		</div>
 	</div>
 </body>
 </html>

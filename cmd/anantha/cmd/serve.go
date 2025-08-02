@@ -394,31 +394,6 @@ const (
 			font-style: italic;
 		}
 
-		/* Tables for detailed data */
-		table {
-			width: 100%;
-			border-collapse: collapse;
-			margin-top: 10px;
-		}
-
-		th, td {
-			padding: 12px 15px;
-			text-align: left;
-			border-bottom: 1px solid var(--gray);
-		}
-
-		th {
-			background-color: #f8fafc;
-			font-weight: 600;
-			color: var(--secondary);
-			font-size: 0.85rem;
-			text-transform: uppercase;
-			letter-spacing: 0.5px;
-		}
-
-		tr:hover {
-			background-color: #f8fafc;
-		}
 
 		/* Zone name styling */
 		.zone-name {
@@ -530,35 +505,43 @@ const (
 			<!-- System Details Card -->
 			<div class="section-title">System Details</div>
 			<div class="card">
-				<div class="data-grid">
-					<table>
-						<thead>
-							<tr>
-								<th>Blower RPM</th>
-								<th>Compressor RPM</th>
-								<th>Power (W)</th>
-								<th>Airflow (CFM)</th>
-								<th>Status</th>
-								<th>Mode</th>
-								<th>Coil Temp</th>
-								<th>Suction Temp</th>
-								<th>Discharge Temp</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr>
-								<td sse-swap="blwrpm">Pending</td>
-								<td sse-swap="comprpm">Pending</td>
-								<td sse-swap="instant">Pending</td>
-								<td sse-swap="cfm">Pending</td>
-								<td sse-swap="opstat">Pending</td>
-								<td sse-swap="opmode">Pending</td>
-								<td sse-swap="oducoiltmp">Pending</td>
-								<td sse-swap="sucttemp">Pending</td>
-								<td sse-swap="dischargetmp">Pending</td>
-							</tr>
-						</tbody>
-					</table>
+				<div class="data-grid grid-cols-2 grid-cols-3">
+					<div class="data-item">
+						<div class="data-label">Blower RPM</div>
+						<div class="data-value" sse-swap="blwrpm">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Compressor RPM</div>
+						<div class="data-value" sse-swap="comprpm">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Power</div>
+						<div class="data-value" sse-swap="instant">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Airflow</div>
+						<div class="data-value" sse-swap="cfm">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Status</div>
+						<div class="data-value" sse-swap="opstat">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Mode</div>
+						<div class="data-value" sse-swap="opmode">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Coil Temp</div>
+						<div class="data-value" sse-swap="oducoiltmp">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Suction Temp</div>
+						<div class="data-value" sse-swap="sucttemp">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Discharge Temp</div>
+						<div class="data-value" sse-swap="dischargetmp">Pending</div>
+					</div>
 				</div>
 			</div>
 

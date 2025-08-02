@@ -434,10 +434,10 @@ const (
 	<div class="container">
 		<header>
 			<h1>Carrier Thermostat Dashboard</h1>
-			<div class="last-updated">Last updated: <span sse-swap="last-updated">Never</span></div>
 		</header>
 
 		<div hx-ext="sse" sse-connect="/events">
+			<div class="last-updated">Last updated: <span sse-swap="last-updated">Never</span></div>
 			<!-- System Overview Card -->
 			<div class="section-title">System Overview</div>
 			<div class="grid grid-cols-2">

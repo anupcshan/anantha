@@ -583,13 +583,19 @@ type DaySchedule struct {
 	Periods []SchedulePeriod
 }
 
-func parseTime(timeStr string) (int, int) {
+func parseTime(timeStr string) (int, int, error) {
 	if timeStr == "00:00" || timeStr == "" {
-		return 0, 0
+		return 0, 0, nil
 	}
 	var hour, minute int
-	fmt.Sscanf(timeStr, "%d:%d", &hour, &minute)
-	return hour, minute
+	n, err := fmt.Sscanf(timeStr, "%d:%d", &hour, &minute)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse time '%s': %w", timeStr, err)
+	}
+	if n != 2 {
+		return 0, 0, fmt.Errorf("expected 2 values when parsing time '%s', got %d", timeStr, n)
+	}
+	return hour, minute, nil
 }
 
 func timeToMinutes(hour, minute int) int {
@@ -602,16 +608,22 @@ func minutesToTime(minutes int) string {
 	return fmt.Sprintf("%02d:%02d", hour, minute)
 }
 
-func computeScheduleBlocks(periods []SchedulePeriod) []SchedulePeriod {
+func computeScheduleBlocks(periods []SchedulePeriod) ([]SchedulePeriod, error) {
 	if len(periods) == 0 {
-		return periods
+		return periods, nil
 	}
 
 	// Sort periods by start time
 	for i := 0; i < len(periods)-1; i++ {
 		for j := i + 1; j < len(periods); j++ {
-			hour1, min1 := parseTime(periods[i].StartTime)
-			hour2, min2 := parseTime(periods[j].StartTime)
+			hour1, min1, err := parseTime(periods[i].StartTime)
+			if err != nil {
+				return nil, fmt.Errorf("invalid start time '%s' in schedule: %w", periods[i].StartTime, err)
+			}
+			hour2, min2, err := parseTime(periods[j].StartTime)
+			if err != nil {
+				return nil, fmt.Errorf("invalid start time '%s' in schedule: %w", periods[j].StartTime, err)
+			}
 			if timeToMinutes(hour1, min1) > timeToMinutes(hour2, min2) {
 				periods[i], periods[j] = periods[j], periods[i]
 			}
@@ -622,17 +634,26 @@ func computeScheduleBlocks(periods []SchedulePeriod) []SchedulePeriod {
 
 	// Calculate end times and durations, splitting blocks that cross midnight
 	for i := 0; i < len(periods); i++ {
-		startHour, startMin := parseTime(periods[i].StartTime)
+		startHour, startMin, err := parseTime(periods[i].StartTime)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start time '%s' in schedule: %w", periods[i].StartTime, err)
+		}
 		startMinutes := timeToMinutes(startHour, startMin)
 
 		var endMinutes int
 		if i < len(periods)-1 {
 			// End time is the start of the next period
-			nextHour, nextMin := parseTime(periods[i+1].StartTime)
+			nextHour, nextMin, err := parseTime(periods[i+1].StartTime)
+			if err != nil {
+				return nil, fmt.Errorf("invalid start time '%s' in schedule: %w", periods[i+1].StartTime, err)
+			}
 			endMinutes = timeToMinutes(nextHour, nextMin)
 		} else {
 			// Last period ends at the start of the first period next day
-			firstHour, firstMin := parseTime(periods[0].StartTime)
+			firstHour, firstMin, err := parseTime(periods[0].StartTime)
+			if err != nil {
+				return nil, fmt.Errorf("invalid start time '%s' in schedule: %w", periods[0].StartTime, err)
+			}
 			endMinutes = timeToMinutes(firstHour, firstMin)
 		}
 
@@ -671,10 +692,10 @@ func computeScheduleBlocks(periods []SchedulePeriod) []SchedulePeriod {
 		}
 	}
 
-	return result
+	return result, nil
 }
 
-func addCrossoverBlocks(daySchedules map[string][]SchedulePeriod, days []string) {
+func addCrossoverBlocks(daySchedules map[string][]SchedulePeriod, days []string) error {
 	// Process each day to add continuation blocks from midnight crossovers
 	for i, day := range days {
 		prevDayIndex := (i - 1 + len(days)) % len(days)
@@ -699,7 +720,10 @@ func addCrossoverBlocks(daySchedules map[string][]SchedulePeriod, days []string)
 		if len(currentPeriods) > 0 {
 			// End at the start of the first period of current day
 			endTime = currentPeriods[0].StartTime
-			endHour, endMin := parseTime(endTime)
+			endHour, endMin, err := parseTime(endTime)
+			if err != nil {
+				return fmt.Errorf("invalid end time '%s' in crossover block: %w", endTime, err)
+			}
 			endMinutes = timeToMinutes(endHour, endMin)
 		} else {
 			// If no periods on current day, we need to find the next day with periods
@@ -722,9 +746,10 @@ func addCrossoverBlocks(daySchedules map[string][]SchedulePeriod, days []string)
 			daySchedules[day] = append([]SchedulePeriod{crossoverBlock}, daySchedules[day]...)
 		}
 	}
+	return nil
 }
 
-func generateScheduleHTML(loadedValues *LoadedValues) string {
+func generateScheduleHTML(loadedValues *LoadedValues) (string, error) {
 	days := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 	daySchedules := make(map[string][]SchedulePeriod)
 
@@ -754,11 +779,17 @@ func generateScheduleHTML(loadedValues *LoadedValues) string {
 		}
 
 		// Compute time blocks and durations for this day
-		daySchedules[day] = computeScheduleBlocks(periods)
+		blocks, err := computeScheduleBlocks(periods)
+		if err != nil {
+			return "", fmt.Errorf("failed to compute schedule blocks for %s: %w", day, err)
+		}
+		daySchedules[day] = blocks
 	}
 
 	// Add crossover blocks from previous day
-	addCrossoverBlocks(daySchedules, days)
+	if err := addCrossoverBlocks(daySchedules, days); err != nil {
+		return "", fmt.Errorf("failed to add crossover blocks: %w", err)
+	}
 
 	// Generate HTML
 	html := `<!DOCTYPE html>
@@ -1077,7 +1108,7 @@ func generateScheduleHTML(loadedValues *LoadedValues) string {
 </body>
 </html>`
 
-	return html
+	return html, nil
 }
 
 var serveCmd = &cobra.Command{
@@ -1366,7 +1397,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 			fmt.Fprint(w, indexTmpl)
 		})
 		webControlMux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
-			scheduleHTML := generateScheduleHTML(loadedValues)
+			scheduleHTML, err := generateScheduleHTML(loadedValues)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Error generating schedule: %v", err), http.StatusInternalServerError)
+				return
+			}
 			fmt.Fprint(w, scheduleHTML)
 		})
 		webControlMux.Handle("/events", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

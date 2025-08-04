@@ -434,10 +434,11 @@ const (
 <body>
 	<div class="container">
 		<header>
-			<h1>Carrier Thermostat Dashboard</h1>
+			<h1>Anantha</h1>
 			<div class="nav-links">
 				<a href="/" class="active">Dashboard</a>
 				<a href="/schedule">Schedule</a>
+				<a href="/profiles">Profiles</a>
 			</div>
 		</header>
 
@@ -749,6 +750,309 @@ func addCrossoverBlocks(daySchedules map[string][]SchedulePeriod, days []string)
 	return nil
 }
 
+func generateProfilesHTML(loadedValues *LoadedValues) (string, error) {
+	activities := []string{"home", "away", "sleep", "wake", "manual"}
+
+	snapshot := loadedValues.Snapshot()
+
+	html := `<!DOCTYPE html>
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		:root {
+			--primary: #3b82f6;
+			--primary-dark: #2563eb;
+			--secondary: #64748b;
+			--success: #10b981;
+			--warning: #f59e0b;
+			--danger: #ef4444;
+			--light: #f8fafc;
+			--dark: #1e293b;
+			--gray: #e2e8f0;
+			--gray-dark: #94a3b8;
+			--border-radius: 8px;
+			--box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+			--transition: all 0.2s ease-in-out;
+		}
+
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+			background-color: #f1f5f9;
+			color: var(--dark);
+			line-height: 1.6;
+			padding: 20px;
+		}
+
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+		}
+
+		header {
+			text-align: center;
+			margin-bottom: 30px;
+			padding: 20px;
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+		}
+
+		h1 {
+			color: var(--primary);
+			margin-bottom: 10px;
+			font-weight: 600;
+		}
+
+		.nav-links {
+			margin-top: 15px;
+			display: flex;
+			justify-content: center;
+			gap: 20px;
+		}
+
+		.nav-links a {
+			color: var(--secondary);
+			text-decoration: none;
+			font-weight: 500;
+			padding: 8px 16px;
+			border-radius: var(--border-radius);
+			transition: var(--transition);
+		}
+
+		.nav-links a:hover {
+			background-color: var(--light);
+			color: var(--primary);
+		}
+
+		.nav-links a.active {
+			background-color: var(--primary);
+			color: white;
+		}
+
+		.profiles-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+			gap: 20px;
+			margin-top: 20px;
+		}
+
+		.profile-card {
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+			padding: 20px;
+			transition: var(--transition);
+		}
+
+		.profile-card:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+		}
+
+		.profile-header {
+			display: flex;
+			align-items: center;
+			margin-bottom: 20px;
+			padding-bottom: 15px;
+			border-bottom: 2px solid var(--gray);
+		}
+
+		.profile-icon {
+			width: 40px;
+			height: 40px;
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			margin-right: 15px;
+			font-size: 1.2rem;
+		}
+
+		.profile-home .profile-icon {
+			background-color: rgba(16, 185, 129, 0.1);
+			color: var(--success);
+		}
+
+		.profile-away .profile-icon {
+			background-color: rgba(245, 158, 11, 0.1);
+			color: var(--warning);
+		}
+
+		.profile-sleep .profile-icon {
+			background-color: rgba(59, 130, 246, 0.1);
+			color: var(--primary);
+		}
+
+		.profile-wake .profile-icon {
+			background-color: rgba(245, 158, 11, 0.1);
+			color: var(--warning);
+		}
+
+		.profile-manual .profile-icon {
+			background-color: rgba(100, 116, 139, 0.1);
+			color: var(--secondary);
+		}
+
+		.profile-name {
+			font-size: 1.2rem;
+			font-weight: 600;
+			color: var(--dark);
+			text-transform: capitalize;
+		}
+
+		.settings-grid {
+			display: grid;
+			gap: 15px;
+		}
+
+		.setting-item {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 12px 0;
+		}
+
+		.setting-label {
+			font-weight: 500;
+			color: var(--secondary);
+		}
+
+		.setting-value {
+			font-weight: 600;
+			font-size: 1.1rem;
+			color: var(--dark);
+		}
+
+		.temperature-value {
+			color: var(--primary);
+		}
+
+		.fan-value {
+			color: var(--secondary);
+			text-transform: capitalize;
+		}
+
+		.no-data {
+			text-align: center;
+			color: var(--gray-dark);
+			font-style: italic;
+			padding: 20px;
+		}
+
+		@media (max-width: 768px) {
+			.profiles-grid {
+				grid-template-columns: 1fr;
+			}
+
+			body {
+				padding: 10px;
+			}
+
+			.profile-card {
+				padding: 15px;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<h1>Anantha</h1>
+			<div class="nav-links">
+				<a href="/">Dashboard</a>
+				<a href="/schedule">Schedule</a>
+				<a href="/profiles" class="active">Profiles</a>
+			</div>
+		</header>
+
+		<div class="profiles-grid">`
+
+	// Generate profile cards
+	for _, activity := range activities {
+		htspKey := fmt.Sprintf("1/activities/%s/htsp", activity)
+		clspKey := fmt.Sprintf("1/activities/%s/clsp", activity)
+		fanKey := fmt.Sprintf("1/activities/%s/fan", activity)
+
+		htspVal, hasHtsp := snapshot[htspKey]
+		clspVal, hasClsp := snapshot[clspKey]
+		fanVal, hasFan := snapshot[fanKey]
+
+		var icon string
+		switch activity {
+		case "home":
+			icon = "🏠"
+		case "away":
+			icon = "🚗"
+		case "sleep":
+			icon = "😴"
+		case "wake":
+			icon = "☀️"
+		case "manual":
+			icon = "⚙️"
+		}
+
+		html += fmt.Sprintf(`
+			<div class="profile-card profile-%s">
+				<div class="profile-header">
+					<div class="profile-icon">%s</div>
+					<div class="profile-name">%s</div>
+				</div>`, activity, icon, activity)
+
+		if hasHtsp || hasClsp || hasFan {
+			html += `<div class="settings-grid">`
+
+			if hasHtsp {
+				html += fmt.Sprintf(`
+				<div class="setting-item">
+					<div class="setting-label">Heat Setpoint</div>
+					<div class="setting-value temperature-value">%.1f°F</div>
+				</div>`, htspVal.value.GetFloatValue())
+			}
+
+			if hasClsp {
+				html += fmt.Sprintf(`
+				<div class="setting-item">
+					<div class="setting-label">Cool Setpoint</div>
+					<div class="setting-value temperature-value">%.1f°F</div>
+				</div>`, clspVal.value.GetFloatValue())
+			}
+
+			if hasFan {
+				fanSetting := string(fanVal.value.GetMaybeStrValue())
+				if fanSetting == "" {
+					fanSetting = "auto"
+				}
+				html += fmt.Sprintf(`
+				<div class="setting-item">
+					<div class="setting-label">Fan Setting</div>
+					<div class="setting-value fan-value">%s</div>
+				</div>`, fanSetting)
+			}
+
+			html += `</div>`
+		} else {
+			html += `<div class="no-data">No settings available</div>`
+		}
+
+		html += `</div>`
+	}
+
+	html += `
+		</div>
+	</div>
+</body>
+</html>`
+
+	return html, nil
+}
+
 func generateScheduleHTML(loadedValues *LoadedValues) (string, error) {
 	days := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 	daySchedules := make(map[string][]SchedulePeriod)
@@ -1029,10 +1333,11 @@ func generateScheduleHTML(loadedValues *LoadedValues) (string, error) {
 <body>
 	<div class="container">
 		<header>
-			<h1>Thermostat Schedule</h1>
+			<h1>Anantha</h1>
 			<div class="nav-links">
 				<a href="/">Dashboard</a>
 				<a href="/schedule" class="active">Schedule</a>
+				<a href="/profiles">Profiles</a>
 			</div>
 		</header>
 
@@ -1403,6 +1708,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 				return
 			}
 			fmt.Fprint(w, scheduleHTML)
+		})
+		webControlMux.HandleFunc("/profiles", func(w http.ResponseWriter, r *http.Request) {
+			profilesHTML, err := generateProfilesHTML(loadedValues)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Error generating profiles: %v", err), http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprint(w, profilesHTML)
 		})
 		webControlMux.Handle("/events", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")

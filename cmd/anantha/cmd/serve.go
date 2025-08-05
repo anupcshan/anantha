@@ -215,6 +215,7 @@ const (
 	<script src="/assets/htmx.org@1.9.12/dist/htmx.min.js"></script>
 	<script src="/assets/htmx.org@1.9.12/dist/ext/sse.js"></script>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
 	<style>
 		:root {
 			--primary: #3b82f6;
@@ -260,9 +261,23 @@ const (
 			box-shadow: var(--box-shadow);
 		}
 
+		.header-content {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 15px;
+			margin-bottom: 10px;
+		}
+
+		.logo {
+			width: 64px;
+			height: 64px;
+			flex-shrink: 0;
+		}
+
 		h1 {
 			color: var(--primary);
-			margin-bottom: 10px;
+			margin: 0;
 			font-weight: 600;
 		}
 
@@ -434,7 +449,10 @@ const (
 <body>
 	<div class="container">
 		<header>
-			<h1>Anantha</h1>
+			<div class="header-content">
+				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
+				<h1>Anantha</h1>
+			</div>
 			<div class="nav-links">
 				<a href="/" class="active">Dashboard</a>
 				<a href="/schedule">Schedule</a>
@@ -759,6 +777,7 @@ func generateProfilesHTML(loadedValues *LoadedValues) (string, error) {
 <html>
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
 	<style>
 		:root {
 			--primary: #3b82f6;
@@ -804,9 +823,23 @@ func generateProfilesHTML(loadedValues *LoadedValues) (string, error) {
 			box-shadow: var(--box-shadow);
 		}
 
+		.header-content {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 15px;
+			margin-bottom: 10px;
+		}
+
+		.logo {
+			width: 64px;
+			height: 64px;
+			flex-shrink: 0;
+		}
+
 		h1 {
 			color: var(--primary);
-			margin-bottom: 10px;
+			margin: 0;
 			font-weight: 600;
 		}
 
@@ -964,7 +997,10 @@ func generateProfilesHTML(loadedValues *LoadedValues) (string, error) {
 <body>
 	<div class="container">
 		<header>
-			<h1>Anantha</h1>
+			<div class="header-content">
+				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
+				<h1>Anantha</h1>
+			</div>
 			<div class="nav-links">
 				<a href="/">Dashboard</a>
 				<a href="/schedule">Schedule</a>
@@ -1100,6 +1136,7 @@ func generateScheduleHTML(loadedValues *LoadedValues) (string, error) {
 <html>
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
 	<style>
 		:root {
 			--primary: #3b82f6;
@@ -1145,9 +1182,23 @@ func generateScheduleHTML(loadedValues *LoadedValues) (string, error) {
 			box-shadow: var(--box-shadow);
 		}
 
+		.header-content {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 15px;
+			margin-bottom: 10px;
+		}
+
+		.logo {
+			width: 64px;
+			height: 64px;
+			flex-shrink: 0;
+		}
+
 		h1 {
 			color: var(--primary);
-			margin-bottom: 10px;
+			margin: 0;
 			font-weight: 600;
 		}
 
@@ -1333,7 +1384,10 @@ func generateScheduleHTML(loadedValues *LoadedValues) (string, error) {
 <body>
 	<div class="container">
 		<header>
-			<h1>Anantha</h1>
+			<div class="header-content">
+				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
+				<h1>Anantha</h1>
+			</div>
 			<div class="nav-links">
 				<a href="/">Dashboard</a>
 				<a href="/schedule" class="active">Schedule</a>

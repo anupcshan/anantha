@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="cmd/anantha/cmd/assets/logo.svg" alt="Anantha Logo" width="200" height="200">
+</div>
+
 # Anantha - Local Control Toolkit for Carrier Thermostats
 
 Anantha enables local control of Carrier Infinity thermostats by intercepting DNS requests and redirecting HTTP/MQTT connections. It provides a web dashboard and Home Assistant integration for thermostat control.

@@ -214,6 +214,8 @@ const (
 <head>
 	<script src="/assets/htmx.org@1.9.12/dist/htmx.min.js"></script>
 	<script src="/assets/htmx.org@1.9.12/dist/ext/sse.js"></script>
+	<script src="/assets/dayjs@1.11.10/dayjs.min.js"></script>
+	<script src="/assets/dayjs@1.11.10/dayjs.relativeTime.min.js"></script>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
 	<style>
@@ -284,6 +286,21 @@ const (
 		.last-updated {
 			color: var(--secondary);
 			font-size: 0.9rem;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.connection-status {
+			font-weight: 600;
+		}
+
+		.connection-status.connected {
+			color: var(--success);
+		}
+
+		.connection-status.disconnected {
+			color: var(--danger);
 		}
 
 		.section-title {
@@ -461,7 +478,10 @@ const (
 		</header>
 
 		<div hx-ext="sse" sse-connect="/events">
-			<div class="last-updated">Last updated: <span sse-swap="last-updated">Never</span></div>
+			<div class="last-updated">
+				Last updated: <span id="last-updated-text" sse-swap="last-updated">Never</span>
+				<span id="connection-status" class="connection-status connected">Connected</span>
+			</div>
 			<!-- System Overview Card -->
 			<div class="section-title">System Overview</div>
 			<div class="grid grid-cols-2">
@@ -584,6 +604,50 @@ const (
 			</div>
 		</div>
 	</div>
+
+	<script>
+		// Initialize dayjs with relative time plugin
+		dayjs.extend(window.dayjs_plugin_relativeTime);
+
+		let lastUpdateTime = null;
+
+		function updateRelativeTime() {
+			const lastUpdatedElement = document.getElementById('last-updated-text');
+			const connectionStatusElement = document.getElementById('connection-status');
+
+			if (lastUpdateTime && lastUpdatedElement) {
+				const now = dayjs();
+				const lastUpdate = dayjs(lastUpdateTime);
+				const diffMinutes = now.diff(lastUpdate, 'minute');
+
+				// Use dayjs for relative time formatting
+				const relativeText = lastUpdate.fromNow();
+				lastUpdatedElement.textContent = relativeText;
+
+				// Consider disconnected if no updates in last 5 minutes
+				const isConnected = diffMinutes < 5;
+
+				if (isConnected) {
+					connectionStatusElement.textContent = 'Connected';
+					connectionStatusElement.className = 'connection-status connected';
+				} else {
+					connectionStatusElement.textContent = 'Disconnected';
+					connectionStatusElement.className = 'connection-status disconnected';
+				}
+			}
+		}
+
+		// Listen for SSE events to update lastUpdateTime
+		document.addEventListener('htmx:sseMessage', function(evt) {
+			if (evt.detail.type === 'last-updated') {
+				lastUpdateTime = new Date(evt.detail.data);
+				updateRelativeTime();
+			}
+		});
+
+		// Update relative time every 2 seconds (dayjs handles the formatting)
+		setInterval(updateRelativeTime, 2000);
+	</script>
 </body>
 </html>
 `

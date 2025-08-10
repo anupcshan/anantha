@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -474,6 +475,7 @@ const (
 				<a href="/" class="active">Dashboard</a>
 				<a href="/schedule">Schedule</a>
 				<a href="/profiles">Profiles</a>
+				<a href="/mqtt-log">MQTT Log</a>
 			</div>
 		</header>
 
@@ -1069,6 +1071,7 @@ func generateProfilesHTML(loadedValues *LoadedValues) (string, error) {
 				<a href="/">Dashboard</a>
 				<a href="/schedule">Schedule</a>
 				<a href="/profiles" class="active">Profiles</a>
+				<a href="/mqtt-log">MQTT Log</a>
 			</div>
 		</header>
 
@@ -1456,6 +1459,7 @@ func generateScheduleHTML(loadedValues *LoadedValues) (string, error) {
 				<a href="/">Dashboard</a>
 				<a href="/schedule" class="active">Schedule</a>
 				<a href="/profiles">Profiles</a>
+				<a href="/mqtt-log">MQTT Log</a>
 			</div>
 		</header>
 
@@ -1903,6 +1907,295 @@ func runServe(cmd *cobra.Command, args []string) error {
 			entries := loadedValues.RecentEntries()
 			for _, ent := range entries {
 				fmt.Fprintf(w, "[%s] %s\n", ent.lastUpdated.Format(time.RFC3339), ent.value)
+			}
+		})
+
+		webControlMux.HandleFunc("/mqtt-log", func(w http.ResponseWriter, r *http.Request) {
+			mqttLogHTML := `<!DOCTYPE html>
+<html>
+<head>
+	<script src="/assets/htmx.org@1.9.12/dist/htmx.min.js"></script>
+	<script src="/assets/htmx.org@1.9.12/dist/ext/sse.js"></script>
+	<script src="/assets/dayjs@1.11.10/dayjs.min.js"></script>
+	<script src="/assets/dayjs@1.11.10/dayjs.relativeTime.min.js"></script>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+	<style>
+		:root {
+			--primary: #3b82f6;
+			--primary-dark: #2563eb;
+			--secondary: #64748b;
+			--success: #10b981;
+			--warning: #f59e0b;
+			--danger: #ef4444;
+			--light: #f8fafc;
+			--dark: #1e293b;
+			--gray: #e2e8f0;
+			--gray-dark: #94a3b8;
+			--border-radius: 8px;
+			--box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+			--transition: all 0.2s ease-in-out;
+		}
+
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+			background-color: #f1f5f9;
+			color: var(--dark);
+			line-height: 1.6;
+			padding: 20px;
+		}
+
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+		}
+
+		header {
+			text-align: center;
+			margin-bottom: 30px;
+			padding: 20px;
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+		}
+
+		.header-content {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 15px;
+			margin-bottom: 10px;
+		}
+
+		.logo {
+			width: 64px;
+			height: 64px;
+			flex-shrink: 0;
+		}
+
+		h1 {
+			color: var(--primary);
+			margin: 0;
+			font-weight: 600;
+		}
+
+		.nav-links {
+			margin-top: 15px;
+			display: flex;
+			justify-content: center;
+			gap: 20px;
+		}
+
+		.nav-links a {
+			color: var(--secondary);
+			text-decoration: none;
+			font-weight: 500;
+			padding: 8px 16px;
+			border-radius: var(--border-radius);
+			transition: var(--transition);
+		}
+
+		.nav-links a:hover {
+			background-color: var(--light);
+			color: var(--primary);
+		}
+
+		.nav-links a.active {
+			background-color: var(--primary);
+			color: white;
+		}
+
+		.log-container {
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+			padding: 20px;
+			max-height: 80vh;
+			overflow-y: auto;
+		}
+
+		.log-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 20px;
+			padding-bottom: 15px;
+			border-bottom: 2px solid var(--gray);
+		}
+
+		.log-title {
+			font-size: 1.2rem;
+			font-weight: 600;
+			color: var(--dark);
+		}
+
+		.connection-status {
+			font-weight: 600;
+		}
+
+		.connection-status.connected {
+			color: var(--success);
+		}
+
+		.connection-status.disconnected {
+			color: var(--danger);
+		}
+
+		.log-entry {
+			display: flex;
+			align-items: flex-start;
+			gap: 12px;
+			padding: 12px 0;
+			border-bottom: 1px solid #f1f5f9;
+			font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+			font-size: 0.9rem;
+		}
+
+		.log-entry:last-child {
+			border-bottom: none;
+		}
+
+		.log-timestamp {
+			color: var(--gray-dark);
+			white-space: nowrap;
+			font-size: 0.85rem;
+			width: 80px;
+		}
+
+		.log-key {
+			color: var(--primary);
+			font-weight: 600;
+			min-width: 200px;
+			word-break: break-all;
+		}
+
+		.log-value {
+			color: var(--dark);
+			flex: 1;
+		}
+
+		.log-entries {
+			max-height: 60vh;
+			overflow-y: auto;
+		}
+
+		.auto-scroll-toggle {
+			margin-left: 15px;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.auto-scroll-toggle input[type="checkbox"] {
+			width: 16px;
+			height: 16px;
+		}
+
+		.auto-scroll-toggle label {
+			font-size: 0.9rem;
+			color: var(--secondary);
+			cursor: pointer;
+		}
+
+		/* Loading indicator */
+		.loading {
+			text-align: center;
+			color: var(--gray-dark);
+			font-style: italic;
+			padding: 20px;
+		}
+
+		@media (max-width: 768px) {
+			body {
+				padding: 10px;
+			}
+
+			.log-container {
+				padding: 15px;
+			}
+
+			.log-entry {
+				flex-direction: column;
+				gap: 4px;
+			}
+
+			.log-timestamp {
+				width: auto;
+			}
+
+			.log-key {
+				min-width: auto;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<div class="header-content">
+				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
+				<h1>Anantha</h1>
+			</div>
+			<div class="nav-links">
+				<a href="/">Dashboard</a>
+				<a href="/schedule">Schedule</a>
+				<a href="/profiles">Profiles</a>
+				<a href="/mqtt-log" class="active">MQTT Log</a>
+			</div>
+		</header>
+
+		<div class="log-container">
+			<div class="log-header">
+				<div class="log-title">Live MQTT Updates</div>
+			</div>
+
+			<div class="log-entries" id="log-entries" hx-ext="sse" sse-connect="/mqtt-log-stream" sse-swap="message" hx-swap="afterbegin">
+				<div class="loading" id="loading-msg">Connecting to MQTT log stream...</div>
+			</div>
+		</div>
+	</div>
+</body>
+</html>`
+			fmt.Fprint(w, mqttLogHTML)
+		})
+
+		webControlMux.HandleFunc("/mqtt-log-stream", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+
+			log.Printf("New MQTT log stream connection from %s", r.RemoteAddr)
+
+			// Send initial message to clear loading state
+			fmt.Fprintf(w, "data: <div class='log-entry'>[%s] Connected to MQTT log stream</div><div id='loading-msg' hx-swap-oob='delete'></div>\n\n", time.Now().Format(time.RFC3339))
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+
+			// Use regex to catch all MQTT updates
+			re := regexp.MustCompile(".*")
+			updateCh := loadedValues.RegexSubscribe(re)
+
+			ctx := r.Context()
+
+			for {
+				select {
+				case <-ctx.Done():
+					log.Printf("MQTT log stream connection closed for %s", r.RemoteAddr)
+					return
+				case update := <-updateCh:
+					fmt.Fprintf(w, "data: <div class='log-entry'>[%s] %s</div>\n\n", update.lastUpdated.Format(time.RFC3339), update.value)
+					if flusher, ok := w.(http.Flusher); ok {
+						flusher.Flush()
+					}
+				}
 			}
 		})
 		if err := http.ListenAndServe(":26268", webControlMux); err != nil {

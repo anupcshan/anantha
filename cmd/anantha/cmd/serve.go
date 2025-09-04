@@ -462,6 +462,43 @@ const (
 			background-color: var(--primary);
 			color: white;
 		}
+
+		.vacation-banner {
+			background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+			border: 1px solid #f59e0b;
+			padding: 12px 20px;
+			margin: 15px 0;
+			border-radius: var(--border-radius);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 10px;
+			font-weight: 500;
+			color: #92400e;
+		}
+
+		.vacation-banner .vacation-icon {
+			font-size: 1.2rem;
+		}
+
+		.vacation-banner .vacation-details {
+			display: flex;
+			align-items: center;
+			gap: 20px;
+			flex-wrap: wrap;
+		}
+
+		.vacation-detail {
+			display: flex;
+			align-items: center;
+			gap: 5px;
+			font-size: 0.9rem;
+		}
+
+		.vacation-detail .label {
+			color: #a16207;
+			font-weight: 600;
+		}
 	</style>
 </head>
 <body>
@@ -480,6 +517,11 @@ const (
 		</header>
 
 		<div hx-ext="sse" sse-connect="/events">
+			<div id="vacation-banner-container"
+				 hx-trigger="sse:system/vacat/vacat throttle:200ms, sse:system/vacat/vacstart throttle:200ms, sse:system/vacat/vacend throttle:200ms"
+				 hx-get="/vacation-banner"
+				 hx-swap="innerHTML">
+			</div>
 			<div class="last-updated">
 				Last updated: <span id="last-updated-text" sse-swap="last-updated">Never</span>
 				<span id="connection-status" class="connection-status connected">Connected</span>
@@ -1839,6 +1881,46 @@ func runServe(cmd *cobra.Command, args []string) error {
 			}
 			fmt.Fprint(w, profilesHTML)
 		})
+		webControlMux.HandleFunc("/vacation-banner", func(w http.ResponseWriter, r *http.Request) {
+			snapshot := loadedValues.Snapshot()
+
+			vacEnabled, hasVacEnabled := snapshot["system/vacat/vacat"]
+			vacStart, hasVacStart := snapshot["system/vacat/vacstart"]
+			vacEnd, hasVacEnd := snapshot["system/vacat/vacend"]
+
+			// Only show banner if vacation is enabled and we have start/end times
+			if !hasVacEnabled || vacEnabled.ToString() != "true" || !hasVacStart || !hasVacEnd {
+				return
+			}
+
+			now := time.Now()
+			startTime, err := time.Parse(time.RFC3339, vacStart.ToString())
+			if err != nil {
+				return
+			}
+			endTime, err := time.Parse(time.RFC3339, vacEnd.ToString())
+			if err != nil {
+				return
+			}
+
+			var bannerHTML string
+			if now.Before(startTime) {
+				// Vacation is scheduled but hasn't started yet
+				bannerHTML = fmt.Sprintf(`<div class="vacation-banner">
+					<div class="vacation-icon">🏖️</div>
+					<span>Vacation Mode starts %s</span>
+				</div>`, startTime.Local().Format("Jan 2, 3:04 PM"))
+			} else if now.After(startTime) && now.Before(endTime) {
+				// Currently in vacation period
+				bannerHTML = fmt.Sprintf(`<div class="vacation-banner">
+					<div class="vacation-icon">🏖️</div>
+					<span>Vacation Mode Active until %s</span>
+				</div>`, endTime.Local().Format("Jan 2, 3:04 PM"))
+			}
+			// If vacation has ended, don't show anything
+
+			fmt.Fprint(w, bannerHTML)
+		})
 		webControlMux.Handle("/events", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
 
@@ -1872,6 +1954,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 				"profile/firmware",
 				"profile/iduversion",
 				"profile/oduversion",
+				"system/vacat/vacat",
+				"system/vacat/vacstart",
+				"system/vacat/vacend",
 			}
 
 			var ts time.Time

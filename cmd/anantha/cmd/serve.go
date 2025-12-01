@@ -1654,7 +1654,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get external IP: %w", err)
 		}
-	else {
+	} else {
 		externalIP, err = ResolveIPAddr("ip4", externalIPString)
 		if err != nil {
 			return fmt.Errorf("failed to parse external IP: %w", err)

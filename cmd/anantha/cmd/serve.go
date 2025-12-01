@@ -1614,7 +1614,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	haMQTTPassword, _ := cmd.Flags().GetString("ha-mqtt-password")
 	protosDir, _ := cmd.Flags().GetString("reqs-dir")
 	clientID, _ := cmd.Flags().GetString("client-id")
-	externalIP, _ := cmd.Flags().GetString("external-ip")
+	externalIPString, _ := cmd.Flags().GetString("external-ip")
 	thingNameOverride, _ := cmd.Flags().GetString("thing-name-override")
 	proxyToAWSIOT, _ := cmd.Flags().GetBool("proxy")
 
@@ -1649,10 +1649,15 @@ func runServe(cmd *cobra.Command, args []string) error {
 		_, _ = io.Copy(os.Stderr, r.Body)
 	})
 
-	if externalIP == "" {
+	if externalIPString == "" {
 		externalIP, err := GetExternalIP()
 		if err != nil {
 			return fmt.Errorf("failed to get external IP: %w", err)
+		}
+	else {
+		externalIP, err = ResolveIPAddr("ip4", externalIPString)
+		if err != nil {
+			return fmt.Errorf("failed to parse external IP: %w", err)
 		}
 	}
 

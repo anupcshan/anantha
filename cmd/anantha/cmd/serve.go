@@ -1649,6 +1649,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		_, _ = io.Copy(os.Stderr, r.Body)
 	})
 
+	externalIP = Net.ResolveIPAddr("ip4", "0.0.0.0")
 	if externalIPString == "" {
 		externalIP, err := GetExternalIP()
 		if err != nil {

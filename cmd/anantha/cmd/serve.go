@@ -1649,14 +1649,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 		_, _ = io.Copy(os.Stderr, r.Body)
 	})
 
-	externalIP, err = net.ResolveIPAddr("ip4", "0.0.0.0").IP
+	externalIP = net.IP
 	if externalIPString == "" {
 		externalIP, err := GetExternalIP()
 		if err != nil {
 			return fmt.Errorf("failed to get external IP: %w", err)
 		}
 	} else {
-		externalIP, err = net.ResolveIPAddr("ip4", externalIPString).IP
+		externalIP, err = net.ResolveIPAddr("ip4", externalIPString)
 		if err != nil {
 			return fmt.Errorf("failed to parse external IP: %w", err)
 		}

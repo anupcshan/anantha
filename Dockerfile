@@ -1,5 +1,5 @@
 # Multi-stage build for anantha
-FROM golang:1.24-bookworm AS builder
+FROM golang:1.25.4-bookworm AS builder
 
 # Set working directory
 WORKDIR /app

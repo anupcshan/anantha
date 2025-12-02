@@ -60,7 +60,7 @@ func (p *Parser) ReadRecord() error {
 	}
 
 	if header[0] != ':' {
-		return fmt.Errorf("Unexpected mark byte %x", header[0])
+		return fmt.Errorf("unexpected mark byte %x", header[0])
 	}
 
 	var length, recType uint8
@@ -108,7 +108,7 @@ func (p *Parser) ReadRecord() error {
 	case 5:
 		copyBody = true
 	default:
-		return fmt.Errorf("Unknown record type %d", recType)
+		return fmt.Errorf("unknown record type %d", recType)
 	}
 
 	checksum := make([]byte, 1)
@@ -128,7 +128,7 @@ func (p *Parser) ReadRecord() error {
 	computedChecksum := ^recordSum + 1 // 2's complement
 
 	if uint8(checksum[0]) != computedChecksum {
-		return fmt.Errorf("Mismatched checksum")
+		return fmt.Errorf("mismatched checksum")
 	}
 
 	if !copyBody {

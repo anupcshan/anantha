@@ -3,7 +3,6 @@ package cmd
 import (
 	"crypto/tls"
 	"embed"
-	_ "embed"
 	"fmt"
 	"io"
 	"log"

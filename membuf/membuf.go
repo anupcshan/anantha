@@ -24,7 +24,7 @@ type replaceConfig struct {
 
 func (r *replaceConfig) Emit() byte {
 	if len(r.str) <= r.nextByte {
-		panic(fmt.Errorf("Reading past end of str for %+v", r))
+		panic(fmt.Errorf("reading past end of str for %+v", r))
 	}
 
 	b := r.str[r.nextByte]
@@ -150,7 +150,7 @@ func updateWithPermutations(buf []byte, modifyRange []byte, targetChecksum uint8
 		return nil
 	}
 
-	return fmt.Errorf("Checksum mismatch: %x vs %x", checksum(buf), targetChecksum)
+	return fmt.Errorf("checksum mismatch: %x vs %x", checksum(buf), targetChecksum)
 }
 
 func (m *memBuffer) ReadAt(p []byte, off int64) (int, error) {
@@ -167,7 +167,7 @@ func (m *memBuffer) ReadAt(p []byte, off int64) (int, error) {
 	}
 
 	if pickBuffer == nil {
-		return 0, fmt.Errorf("No pickbuffer")
+		return 0, fmt.Errorf("no pickbuffer")
 	}
 
 	blob := pickBuffer.buf

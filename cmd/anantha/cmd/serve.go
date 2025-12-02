@@ -179,9 +179,9 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 	return pk, nil
 }
 
-func GetExternalIP(externalIPString string) (net.IP, error) {
-	if externalIPString != "" {
-		var parsedIP net.IP = net.ParseIP(externalIPString)
+func GetExternalIP(externalIPOverride string) (net.IP, error) {
+	if externalIPOverride != "" {
+		var parsedIP net.IP = net.ParseIP(externalIPOverride)
 		if parsedIP != nil {
 			return parsedIP, nil
 		} else {
@@ -1610,7 +1610,7 @@ func init() {
 	serveCmd.Flags().String("ha-mqtt-password", "", "Home Assistant MQTT Password")
 	serveCmd.Flags().String("reqs-dir", "$HOME/.anantha/protos", "Directory where request protos are stored")
 	serveCmd.Flags().String("client-id", "", "MQTT Client ID (this should be the same as the HVAC device ID, e.g. '4123X123456')")
-	serveCmd.Flags().String("external-ip", "", "Override auto-detected external IP")
+	serveCmd.Flags().String("external-ip-override", "", "Override auto-detected external IP")
 	serveCmd.Flags().String("thing-name-override", "", "Thingname override - you should never need to set this")
 	serveCmd.Flags().Bool("proxy", false, "Proxy requests to AWS IOT - requires a valid client certificate for now (strongly discouraged)")
 }
@@ -1623,7 +1623,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	haMQTTPassword, _ := cmd.Flags().GetString("ha-mqtt-password")
 	protosDir, _ := cmd.Flags().GetString("reqs-dir")
 	clientID, _ := cmd.Flags().GetString("client-id")
-	externalIPString, _ := cmd.Flags().GetString("external-ip")
+	externalIPOverride, _ := cmd.Flags().GetString("external-ip-override")
 	thingNameOverride, _ := cmd.Flags().GetString("thing-name-override")
 	proxyToAWSIOT, _ := cmd.Flags().GetBool("proxy")
 
@@ -1658,7 +1658,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		_, _ = io.Copy(os.Stderr, r.Body)
 	})
 
-	externalIP, err := GetExternalIP(externalIPString)
+	externalIP, err := GetExternalIP(externalIPOverride)
 	if err != nil {
 		return fmt.Errorf("failed to get external IP: %w", err)
 	}

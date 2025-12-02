@@ -181,7 +181,7 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 
 func GetExternalIP(externalIPOverride string) (net.IP, error) {
 	if externalIPOverride != "" {
-		var parsedIP net.IP = net.ParseIP(externalIPOverride)
+		parsedIP := net.ParseIP(externalIPOverride)
 		if parsedIP != nil {
 			return parsedIP, nil
 		} else {

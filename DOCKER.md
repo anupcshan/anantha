@@ -35,7 +35,8 @@ docker run -p 53:53/udp -p 53:53/tcp -p 80:80 -p 443:443 -p 8883:8883 -p 26268:2
   --ha-mqtt-topic-prefix <HA_MQTT_TOPIC_PREFIX> \
   --ha-mqtt-username <HA_MQTT_USERNAME> \
   --ha-mqtt-password <HA_MQTT_PASSWORD> \
-  --client-id <THERMOSTAT_DEVICE_ID>
+  --client-id <THERMOSTAT_DEVICE_ID> \
+  --external-ip-override <DOCKER_HOST_IP> # Optional
 ```
 
 ### Docker Compose Example
@@ -59,6 +60,7 @@ services:
       --ha-mqtt-username HA_MQTT_USERNAME
       --ha-mqtt-password HA_MQTT_PASSWORD
       --client-id YOUR_THERMOSTAT_ID
+      --external-ip-override DOCKER_HOST_IP
     restart: unless-stopped
 ```
 

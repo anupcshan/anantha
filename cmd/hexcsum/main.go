@@ -48,11 +48,7 @@ func main() {
 	w := &checksumWriter{}
 
 	parser := intelhex.NewParser(io.TeeReader(f, fCh), w)
-	for {
-		if !parser.HasNext() {
-			break
-		}
-
+	for parser.HasNext() {
 		err := parser.ReadRecord()
 		if err != nil {
 			log.Fatal(err)

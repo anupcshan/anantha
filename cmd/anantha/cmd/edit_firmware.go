@@ -45,15 +45,11 @@ func runEditFirmware(cmd *cobra.Command, args []string) error {
 	}
 	defer f.Close()
 
-	var updateCfg membuf.UpdateConfig = cagenresults.Verisign
+	var updateCfg = cagenresults.Verisign
 
 	buf := membuf.NewMemBuffer()
 	parser := intelhex.NewParser(f, buf)
-	for {
-		if !parser.HasNext() {
-			break
-		}
-
+	for parser.HasNext() {
 		err := parser.ReadRecord()
 		if err != nil {
 			return err

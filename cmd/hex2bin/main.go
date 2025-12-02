@@ -40,11 +40,7 @@ func main() {
 	}
 
 	parser := intelhex.NewParser(f, outF, opts...)
-	for {
-		if !parser.HasNext() {
-			break
-		}
-
+	for parser.HasNext() {
 		err := parser.ReadRecord()
 		if err != nil {
 			log.Fatal(err)

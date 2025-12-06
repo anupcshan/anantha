@@ -508,6 +508,12 @@ const (
 			color: #a16207;
 			font-weight: 600;
 		}
+
+		.usage-breakdown {
+			font-size: 0.75rem;
+			color: var(--secondary);
+			margin-top: 8px;
+		}
 	</style>
 </head>
 <body>
@@ -633,6 +639,77 @@ const (
 					<div class="data-item">
 						<div class="data-label">Discharge Temp</div>
 						<div class="data-value" sse-swap="dischargetmp">Pending</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Energy Usage Card -->
+			<div class="section-title">Energy Usage</div>
+			<div class="grid grid-cols-3">
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-day1">--</div>
+						<div class="data-value" sse-swap="usage-total-day1" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/day1/hpheat">--</span> heat,
+							<span sse-swap="/usage/day1/cooling">--</span> cool,
+							<span sse-swap="/usage/day1/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-month1">--</div>
+						<div class="data-value" sse-swap="usage-total-month1" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/month1/hpheat">--</span> heat,
+							<span sse-swap="/usage/month1/cooling">--</span> cool,
+							<span sse-swap="/usage/month1/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-year1">--</div>
+						<div class="data-value" sse-swap="usage-total-year1" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/year1/hpheat">--</span> heat,
+							<span sse-swap="/usage/year1/cooling">--</span> cool,
+							<span sse-swap="/usage/year1/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-day2">--</div>
+						<div class="data-value" sse-swap="usage-total-day2" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/day2/hpheat">--</span> heat,
+							<span sse-swap="/usage/day2/cooling">--</span> cool,
+							<span sse-swap="/usage/day2/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-month2">--</div>
+						<div class="data-value" sse-swap="usage-total-month2" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/month2/hpheat">--</span> heat,
+							<span sse-swap="/usage/month2/cooling">--</span> cool,
+							<span sse-swap="/usage/month2/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-year2">--</div>
+						<div class="data-value" sse-swap="usage-total-year2" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/year2/hpheat">--</span> heat,
+							<span sse-swap="/usage/year2/cooling">--</span> cool,
+							<span sse-swap="/usage/year2/fan">--</span> fan
+						</div>
 					</div>
 				</div>
 			</div>
@@ -1968,6 +2045,25 @@ func runServe(cmd *cobra.Command, args []string) error {
 				"system/vacat/vacat",
 				"system/vacat/vacstart",
 				"system/vacat/vacend",
+				// Energy usage
+				"/usage/day1/hpheat",
+				"/usage/day2/hpheat",
+				"/usage/month1/hpheat",
+				"/usage/month2/hpheat",
+				"/usage/year1/hpheat",
+				"/usage/year2/hpheat",
+				"/usage/day1/cooling",
+				"/usage/day2/cooling",
+				"/usage/month1/cooling",
+				"/usage/month2/cooling",
+				"/usage/year1/cooling",
+				"/usage/year2/cooling",
+				"/usage/day1/fan",
+				"/usage/day2/fan",
+				"/usage/month1/fan",
+				"/usage/month2/fan",
+				"/usage/year1/fan",
+				"/usage/year2/fan",
 			}
 
 			var ts time.Time
@@ -1979,6 +2075,35 @@ func runServe(cmd *cobra.Command, args []string) error {
 						ts = ent.lastUpdated
 					}
 				}
+
+				// Compute energy usage totals
+				usageValues := make(map[string]int32)
+				for i, ent := range tv {
+					if strings.HasPrefix(topics[i], "/usage/") {
+						if ent.value != nil {
+							if ent.value.ConfigType == carrier.ConfigType_CT_INT64 {
+								usageValues[topics[i]] = ent.value.GetAnotherIntValue()
+							} else {
+								usageValues[topics[i]] = ent.value.GetIntValue()
+							}
+						}
+					}
+				}
+				for _, period := range []string{"day1", "day2", "month1", "month2", "year1", "year2"} {
+					total := usageValues["/usage/"+period+"/hpheat"] +
+						usageValues["/usage/"+period+"/cooling"] +
+						usageValues["/usage/"+period+"/fan"]
+					data["usage-total-"+period] = fmt.Sprintf("%d kWh", total)
+				}
+
+				// Compute period labels based on current time
+				now := time.Now()
+				data["usage-label-day1"] = now.AddDate(0, 0, -1).Format("Mon, Jan 2 2006")
+				data["usage-label-day2"] = now.AddDate(0, 0, -2).Format("Mon, Jan 2 2006")
+				data["usage-label-month1"] = now.AddDate(0, -1, 0).Format("Jan 2006")
+				data["usage-label-month2"] = now.AddDate(0, -2, 0).Format("Jan 2006")
+				data["usage-label-year1"] = now.Format("2006")
+				data["usage-label-year2"] = now.AddDate(-1, 0, 0).Format("2006")
 
 				data["last-updated"] = ts.Format(time.DateTime)
 

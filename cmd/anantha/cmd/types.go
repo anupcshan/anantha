@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -43,6 +44,23 @@ func (t TimestampedValue) ToString() string {
 		return fmt.Sprintf("%d W", t.value.GetIntValue())
 	case "cfm":
 		return fmt.Sprintf("%d CFM", t.value.GetIntValue())
+	}
+
+	// Energy usage values - only electrical categories are kWh
+	if strings.HasPrefix(t.value.Name, "/usage/") {
+		isElectrical := strings.HasSuffix(t.value.Name, "/hpheat") ||
+			strings.HasSuffix(t.value.Name, "/cooling") ||
+			strings.HasSuffix(t.value.Name, "/fan")
+		var val int64
+		if t.value.ConfigType == carrier.ConfigType_CT_INT64 {
+			val = int64(t.value.GetAnotherIntValue())
+		} else {
+			val = int64(t.value.GetIntValue())
+		}
+		if isElectrical {
+			return fmt.Sprintf("%d kWh", val)
+		}
+		return fmt.Sprintf("%d", val)
 	}
 
 	switch t.value.ConfigType {

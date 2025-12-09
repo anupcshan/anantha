@@ -2012,11 +2012,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 		webControlMux.Handle("/events", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
 
-			dataCache := make(map[string]string)
-
-			ticker := time.NewTicker(time.Second)
-			defer ticker.Stop()
-
 			topics := []string{
 				"sensor/wallControl/rh",
 				"sensor/wallControl/rt",
@@ -2066,62 +2061,89 @@ func runServe(cmd *cobra.Command, args []string) error {
 				"/usage/year2/fan",
 			}
 
+			currentValues := make(map[string]TimestampedValue)
+			dataCache := make(map[string]string)
 			var ts time.Time
-			loadedValues.OnChangeN(r.Context(), topics, func(tv []TimestampedValue) {
-				data := map[string]string{}
-				for i, ent := range tv {
-					data[topics[i]] = ent.ToString()
-					if ts.Before(ent.lastUpdated) {
-						ts = ent.lastUpdated
-					}
+
+			sendEvent := func(event, data string) {
+				if dataCache[event] == data {
+					return
 				}
-
-				// Compute energy usage totals
-				usageValues := make(map[string]int32)
-				for i, ent := range tv {
-					if strings.HasPrefix(topics[i], "/usage/") {
-						if ent.value != nil {
-							if ent.value.ConfigType == carrier.ConfigType_CT_INT64 {
-								usageValues[topics[i]] = ent.value.GetAnotherIntValue()
-							} else {
-								usageValues[topics[i]] = ent.value.GetIntValue()
-							}
-						}
-					}
-				}
-				for _, period := range []string{"day1", "day2", "month1", "month2", "year1", "year2"} {
-					total := usageValues["/usage/"+period+"/hpheat"] +
-						usageValues["/usage/"+period+"/cooling"] +
-						usageValues["/usage/"+period+"/fan"]
-					data["usage-total-"+period] = fmt.Sprintf("%d kWh", total)
-				}
-
-				// Compute period labels based on current time
-				now := time.Now()
-				data["usage-label-day1"] = now.AddDate(0, 0, -1).Format("Mon, Jan 2 2006")
-				data["usage-label-day2"] = now.AddDate(0, 0, -2).Format("Mon, Jan 2 2006")
-				data["usage-label-month1"] = now.AddDate(0, -1, 0).Format("Jan 2006")
-				data["usage-label-month2"] = now.AddDate(0, -2, 0).Format("Jan 2006")
-				data["usage-label-year1"] = now.Format("2006")
-				data["usage-label-year2"] = now.AddDate(-1, 0, 0).Format("2006")
-
-				data["last-updated"] = ts.Format(time.DateTime)
-
-				for k, v := range data {
-					if dataCache[k] == v {
-						continue
-					}
-
-					fmt.Fprintf(w, "event: %s\n", k)
-					fmt.Fprintf(w, "data: %s\n", v)
-					fmt.Fprint(w, "\n\n")
-					dataCache[k] = v
-				}
-
+				dataCache[event] = data
+				fmt.Fprintf(w, "event: %s\n", event)
+				fmt.Fprintf(w, "data: %s\n", data)
+				fmt.Fprint(w, "\n\n")
 				w.(http.Flusher).Flush()
-			})
+			}
 
-			<-r.Context().Done()
+			sendUsageTotal := func(period string) {
+				getUsageValue := func(topic string) int32 {
+					if ent, ok := currentValues[topic]; ok && ent.value != nil {
+						if ent.value.ConfigType == carrier.ConfigType_CT_INT64 {
+							return ent.value.GetAnotherIntValue()
+						}
+						return ent.value.GetIntValue()
+					}
+					return 0
+				}
+				total := getUsageValue("/usage/"+period+"/hpheat") +
+					getUsageValue("/usage/"+period+"/cooling") +
+					getUsageValue("/usage/"+period+"/fan")
+				sendEvent("usage-total-"+period, fmt.Sprintf("%d kWh", total))
+
+				// Send label for this period (dataCache handles deduplication)
+				now := time.Now()
+				switch period {
+				case "day1":
+					sendEvent("usage-label-day1", now.AddDate(0, 0, -1).Format("Mon, Jan 2 2006"))
+				case "day2":
+					sendEvent("usage-label-day2", now.AddDate(0, 0, -2).Format("Mon, Jan 2 2006"))
+				case "month1":
+					sendEvent("usage-label-month1", now.AddDate(0, -1, 0).Format("Jan 2006"))
+				case "month2":
+					sendEvent("usage-label-month2", now.AddDate(0, -2, 0).Format("Jan 2006"))
+				case "year1":
+					sendEvent("usage-label-year1", now.Format("2006"))
+				case "year2":
+					sendEvent("usage-label-year2", now.AddDate(-1, 0, 0).Format("2006"))
+				}
+			}
+
+			processUpdate := func(tv TimestampedValue) {
+				currentValues[tv.value.Name] = tv
+				if ts.Before(tv.lastUpdated) {
+					ts = tv.lastUpdated
+				}
+
+				sendEvent(tv.value.Name, tv.ToString())
+				sendEvent("last-updated", ts.Format(time.DateTime))
+
+				// If it's a usage topic, recompute the relevant total
+				if strings.HasPrefix(tv.value.Name, "/usage/") {
+					parts := strings.Split(tv.value.Name, "/")
+					if len(parts) >= 3 {
+						sendUsageTotal(parts[2]) // e.g., "day1", "month1", etc.
+					}
+				}
+			}
+
+			// Send initial values
+			for _, topic := range topics {
+				if v := loadedValues.Get(topic); v.value != nil {
+					processUpdate(v)
+				}
+			}
+
+			// Subscribe and process updates
+			subCh := loadedValues.Subscribe(topics)
+			for {
+				select {
+				case <-r.Context().Done():
+					return
+				case tv := <-subCh:
+					processUpdate(tv)
+				}
+			}
 		}))
 
 		webControlMux.HandleFunc("/recent", func(w http.ResponseWriter, r *http.Request) {

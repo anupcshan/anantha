@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<script src="/assets/htmx.org@1.9.12/dist/htmx.min.js"></script>
+	<script src="/assets/htmx.org@1.9.12/dist/ext/sse.js"></script>
+	<script src="/assets/dayjs@1.11.10/dayjs.min.js"></script>
+	<script src="/assets/dayjs@1.11.10/dayjs.relativeTime.min.js"></script>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+	<link rel="stylesheet" href="/assets/style.css">
+	<style>
+		.last-updated {
+			color: var(--secondary);
+			font-size: 0.9rem;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.connection-status {
+			font-weight: 600;
+		}
+
+		.connection-status.connected {
+			color: var(--success);
+		}
+
+		.connection-status.disconnected {
+			color: var(--danger);
+		}
+
+		.section-title {
+			font-size: 1.2rem;
+			font-weight: 600;
+			margin: 25px 0 15px 0;
+			color: var(--dark);
+			padding-bottom: 8px;
+			border-bottom: 2px solid var(--gray);
+		}
+
+		.grid {
+			display: grid;
+			gap: 20px;
+		}
+
+		.grid-cols-1 { grid-template-columns: 1fr; }
+		.grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+		.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+
+		.card-header {
+			font-weight: 600;
+			margin-bottom: 15px;
+			color: var(--primary);
+			font-size: 1.1rem;
+		}
+
+		.data-grid {
+			display: grid;
+			gap: 15px;
+		}
+
+		.data-item {
+			display: flex;
+			flex-direction: column;
+		}
+
+		.data-label {
+			font-size: 0.85rem;
+			color: var(--secondary);
+			margin-bottom: 5px;
+		}
+
+		.data-value {
+			font-weight: 600;
+			font-size: 1.1rem;
+			color: var(--dark);
+		}
+
+		.status-indicator {
+			display: inline-block;
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			margin-right: 8px;
+		}
+
+		.status-online {
+			background-color: var(--success);
+		}
+
+		.status-offline {
+			background-color: var(--gray-dark);
+		}
+
+		.temp-value {
+			color: var(--primary);
+		}
+
+		.humidity-value {
+			color: var(--warning);
+		}
+
+		.conditioning-heating {
+			color: var(--danger);
+		}
+
+		.conditioning-cooling {
+			color: var(--primary);
+		}
+
+		.conditioning-off {
+			color: var(--gray-dark);
+		}
+
+		/* Responsive design */
+		@media (max-width: 768px) {
+			.grid-cols-2, .grid-cols-3 {
+				grid-template-columns: 1fr;
+			}
+		}
+
+		@media (min-width: 769px) and (max-width: 1024px) {
+			.grid-cols-3 {
+				grid-template-columns: repeat(2, 1fr);
+			}
+		}
+
+		/* Loading state */
+		.data-value[sse-swap="Pending"] {
+			color: var(--gray-dark);
+			font-style: italic;
+		}
+
+		/* Zone name styling */
+		.zone-name {
+			font-size: 1.3rem;
+			font-weight: 600;
+			color: var(--primary-dark);
+			text-align: center;
+			margin: 20px 0;
+		}
+
+		.vacation-banner {
+			background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+			border: 1px solid #f59e0b;
+			padding: 12px 20px;
+			margin: 15px 0;
+			border-radius: var(--border-radius);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 10px;
+			font-weight: 500;
+			color: #92400e;
+		}
+
+		.vacation-banner .vacation-icon {
+			font-size: 1.2rem;
+		}
+
+		.vacation-banner .vacation-details {
+			display: flex;
+			align-items: center;
+			gap: 20px;
+			flex-wrap: wrap;
+		}
+
+		.vacation-detail {
+			display: flex;
+			align-items: center;
+			gap: 5px;
+			font-size: 0.9rem;
+		}
+
+		.vacation-detail .label {
+			color: #a16207;
+			font-weight: 600;
+		}
+
+		.usage-breakdown {
+			font-size: 0.75rem;
+			color: var(--secondary);
+			margin-top: 8px;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<div class="header-content">
+				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
+				<h1>Anantha</h1>
+			</div>
+			<div class="nav-links">
+				<a href="/" class="active">Dashboard</a>
+				<a href="/schedule">Schedule</a>
+				<a href="/profiles">Profiles</a>
+				<a href="/mqtt-log">MQTT Log</a>
+			</div>
+		</header>
+
+		<div hx-ext="sse" sse-connect="/events">
+			<div id="vacation-banner-container"
+				 hx-trigger="sse:system/vacat/vacat throttle:200ms, sse:system/vacat/vacstart throttle:200ms, sse:system/vacat/vacend throttle:200ms"
+				 hx-get="/vacation-banner"
+				 hx-swap="innerHTML">
+			</div>
+			<div class="last-updated">
+				Last updated: <span id="last-updated-text" sse-swap="last-updated">Never</span>
+				<span id="connection-status" class="connection-status connected">Connected</span>
+			</div>
+			<!-- System Overview Card -->
+			<div class="section-title">System Overview</div>
+			<div class="grid grid-cols-2">
+				<div class="card">
+					<div class="data-grid grid-cols-2">
+						<div class="data-item">
+							<div class="data-label">Outside Temperature</div>
+							<div class="data-value temp-value" sse-swap="system/oat">Pending</div>
+						</div>
+						<div class="data-item">
+							<div class="data-label">System Mode</div>
+							<div class="data-value" sse-swap="system/mode">Pending</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="card">
+					<div class="data-item">
+						<div class="data-label">Zone</div>
+						<div class="zone-name" sse-swap="1/name">Zone Name Pending</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Zone Control Card -->
+			<div class="section-title">Zone Control</div>
+			<div class="card">
+				<div class="data-grid grid-cols-2 grid-cols-3">
+					<div class="data-item">
+						<div class="data-label">Temperature</div>
+						<div class="data-value temp-value" sse-swap="1/rt">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Humidity</div>
+						<div class="data-value humidity-value" sse-swap="1/rh">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Current Activity</div>
+						<div class="data-value" sse-swap="1/currentActivity">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Conditioning</div>
+						<div class="data-value" sse-swap="1/zoneconditioning">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Heat Setpoint</div>
+						<div class="data-value" sse-swap="1/htsp">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Cool Setpoint</div>
+						<div class="data-value" sse-swap="1/clsp">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Fan Status</div>
+						<div class="data-value" sse-swap="1/fan">Pending</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- System Details Card -->
+			<div class="section-title">System Details</div>
+			<div class="card">
+				<div class="data-grid grid-cols-2 grid-cols-3">
+					<div class="data-item">
+						<div class="data-label">Blower RPM</div>
+						<div class="data-value" sse-swap="blwrpm">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Compressor RPM</div>
+						<div class="data-value" sse-swap="comprpm">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Power</div>
+						<div class="data-value" sse-swap="instant">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Airflow</div>
+						<div class="data-value" sse-swap="cfm">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Status</div>
+						<div class="data-value" sse-swap="opstat">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Mode</div>
+						<div class="data-value" sse-swap="opmode">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Coil Temp</div>
+						<div class="data-value" sse-swap="oducoiltmp">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Suction Temp</div>
+						<div class="data-value" sse-swap="sucttemp">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">Discharge Temp</div>
+						<div class="data-value" sse-swap="dischargetmp">Pending</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Energy Usage Card -->
+			<div class="section-title">Energy Usage</div>
+			<div class="grid grid-cols-3">
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-day1">--</div>
+						<div class="data-value" sse-swap="usage-total-day1" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/day1/hpheat">--</span> heat,
+							<span sse-swap="/usage/day1/cooling">--</span> cool,
+							<span sse-swap="/usage/day1/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-month1">--</div>
+						<div class="data-value" sse-swap="usage-total-month1" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/month1/hpheat">--</span> heat,
+							<span sse-swap="/usage/month1/cooling">--</span> cool,
+							<span sse-swap="/usage/month1/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-year1">--</div>
+						<div class="data-value" sse-swap="usage-total-year1" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/year1/hpheat">--</span> heat,
+							<span sse-swap="/usage/year1/cooling">--</span> cool,
+							<span sse-swap="/usage/year1/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-day2">--</div>
+						<div class="data-value" sse-swap="usage-total-day2" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/day2/hpheat">--</span> heat,
+							<span sse-swap="/usage/day2/cooling">--</span> cool,
+							<span sse-swap="/usage/day2/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-month2">--</div>
+						<div class="data-value" sse-swap="usage-total-month2" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/month2/hpheat">--</span> heat,
+							<span sse-swap="/usage/month2/cooling">--</span> cool,
+							<span sse-swap="/usage/month2/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+				<div class="card">
+					<div class="data-item" style="text-align: center;">
+						<div class="data-label" sse-swap="usage-label-year2">--</div>
+						<div class="data-value" sse-swap="usage-total-year2" style="font-size: 1.4rem;">--</div>
+						<div class="usage-breakdown">
+							<span sse-swap="/usage/year2/hpheat">--</span> heat,
+							<span sse-swap="/usage/year2/cooling">--</span> cool,
+							<span sse-swap="/usage/year2/fan">--</span> fan
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Version Information Card -->
+			<div class="section-title">System Versions</div>
+			<div class="card">
+				<div class="data-grid grid-cols-3">
+					<div class="data-item">
+						<div class="data-label">Firmware</div>
+						<div class="data-value" sse-swap="profile/firmware">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">IDU Version</div>
+						<div class="data-value" sse-swap="profile/iduversion">Pending</div>
+					</div>
+					<div class="data-item">
+						<div class="data-label">ODU Version</div>
+						<div class="data-value" sse-swap="profile/oduversion">Pending</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		// Initialize dayjs with relative time plugin
+		dayjs.extend(window.dayjs_plugin_relativeTime);
+
+		let lastUpdateTime = null;
+
+		function updateRelativeTime() {
+			const lastUpdatedElement = document.getElementById('last-updated-text');
+			const connectionStatusElement = document.getElementById('connection-status');
+
+			if (lastUpdateTime && lastUpdatedElement) {
+				const now = dayjs();
+				const lastUpdate = dayjs(lastUpdateTime);
+				const diffMinutes = now.diff(lastUpdate, 'minute');
+
+				// Use dayjs for relative time formatting
+				const relativeText = lastUpdate.fromNow();
+				lastUpdatedElement.textContent = relativeText;
+
+				// Consider disconnected if no updates in last 5 minutes
+				const isConnected = diffMinutes < 5;
+
+				if (isConnected) {
+					connectionStatusElement.textContent = 'Connected';
+					connectionStatusElement.className = 'connection-status connected';
+				} else {
+					connectionStatusElement.textContent = 'Disconnected';
+					connectionStatusElement.className = 'connection-status disconnected';
+				}
+			}
+		}
+
+		// Listen for SSE events to update lastUpdateTime
+		document.addEventListener('htmx:sseMessage', function(evt) {
+			if (evt.detail.type === 'last-updated') {
+				lastUpdateTime = new Date(evt.detail.data);
+				updateRelativeTime();
+			}
+		});
+
+		// Update relative time every 2 seconds (dayjs handles the formatting)
+		setInterval(updateRelativeTime, 2000);
+	</script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+	<link rel="stylesheet" href="/assets/style.css">
+	<style>
+		.schedule-grid {
+			display: grid;
+			grid-template-columns: repeat(7, 1fr);
+			gap: 15px;
+			margin-top: 20px;
+		}
+
+		.day-column {
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+			padding: 15px;
+			min-height: 600px;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.day-header {
+			font-weight: 600;
+			color: var(--primary);
+			margin-bottom: 15px;
+			text-align: center;
+			padding-bottom: 10px;
+			border-bottom: 2px solid var(--gray);
+			flex-shrink: 0;
+		}
+
+		.timeline {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			position: relative;
+		}
+
+		.time-block {
+			border-radius: 6px;
+			padding: 8px 12px;
+			margin-bottom: 2px;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			border-left: 4px solid;
+			position: relative;
+		}
+
+		.time-block.activity-home {
+			background-color: #ecfdf5;
+			border-left-color: var(--success);
+		}
+
+		.time-block.activity-sleep {
+			background-color: #eff6ff;
+			border-left-color: var(--primary);
+		}
+
+		.time-block.activity-away {
+			background-color: #fffbeb;
+			border-left-color: var(--warning);
+		}
+
+		.block-header {
+			font-weight: 600;
+			color: var(--dark);
+			font-size: 0.85rem;
+			margin-bottom: 2px;
+		}
+
+		.block-time-range {
+			font-size: 0.75rem;
+			color: var(--secondary);
+			margin-bottom: 4px;
+		}
+
+		.block-activity {
+			font-size: 0.8rem;
+			font-weight: 500;
+			text-transform: capitalize;
+		}
+
+		.activity-home .block-activity {
+			color: var(--success);
+		}
+
+		.activity-sleep .block-activity {
+			color: var(--primary);
+		}
+
+		.activity-away .block-activity {
+			color: var(--warning);
+		}
+
+		.block-duration {
+			font-size: 0.7rem;
+			color: var(--gray-dark);
+			margin-top: 2px;
+		}
+
+		.current-time-indicator {
+			position: absolute;
+			left: 0;
+			right: 0;
+			height: 2px;
+			background-color: var(--danger);
+			z-index: 10;
+			box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+		}
+
+		.current-time-indicator::before {
+			content: '';
+			position: absolute;
+			left: -4px;
+			top: -2px;
+			width: 8px;
+			height: 6px;
+			background-color: var(--danger);
+			border-radius: 50%;
+		}
+
+		.current-time-indicator::after {
+			content: attr(data-time);
+			position: absolute;
+			right: 8px;
+			top: -12px;
+			font-size: 0.7rem;
+			color: var(--danger);
+			font-weight: 600;
+			background: white;
+			padding: 2px 6px;
+			border-radius: 4px;
+			box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+		}
+
+		.no-schedule {
+			text-align: center;
+			color: var(--gray-dark);
+			font-style: italic;
+			margin-top: 20px;
+		}
+
+		@media (max-width: 1024px) {
+			.schedule-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+
+		@media (min-width: 768px) and (max-width: 1024px) {
+			.schedule-grid {
+				grid-template-columns: repeat(2, 1fr);
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<div class="header-content">
+				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
+				<h1>Anantha</h1>
+			</div>
+			<div class="nav-links">
+				<a href="/">Dashboard</a>
+				<a href="/schedule" class="active">Schedule</a>
+				<a href="/profiles">Profiles</a>
+				<a href="/mqtt-log">MQTT Log</a>
+			</div>
+		</header>
+
+		<div class="schedule-grid">
+			{{range .Days}}
+			<div class="day-column">
+				<div class="day-header">{{.Name}}</div>
+				<div class="timeline">
+					{{if .Periods}}
+					{{range .Periods}}
+					<div class="time-block activity-{{.Activity}}" style="height: {{.HeightPercent}}%;">
+						<div class="block-time-range">{{.StartTime}} - {{.EndTime}}</div>
+						<div class="block-activity">{{.Activity}}</div>
+						<div class="block-duration">{{.DurationStr}}</div>
+					</div>
+					{{end}}
+					{{else}}
+					<div class="no-schedule">No schedule entries</div>
+					{{end}}
+					{{if .IsToday}}
+					<div class="current-time-indicator" style="top: {{.CurrentTimePercent}}%;" data-time="{{.CurrentTimeStr}}"></div>
+					{{end}}
+				</div>
+			</div>
+			{{end}}
+		</div>
+	</div>
+</body>
+</html>

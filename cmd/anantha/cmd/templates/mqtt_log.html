@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<script src="/assets/htmx.org@1.9.12/dist/htmx.min.js"></script>
+	<script src="/assets/htmx.org@1.9.12/dist/ext/sse.js"></script>
+	<script src="/assets/dayjs@1.11.10/dayjs.min.js"></script>
+	<script src="/assets/dayjs@1.11.10/dayjs.relativeTime.min.js"></script>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+	<link rel="stylesheet" href="/assets/style.css">
+	<style>
+		.log-container {
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+			padding: 20px;
+			max-height: 80vh;
+			overflow-y: auto;
+		}
+
+		.log-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 20px;
+			padding-bottom: 15px;
+			border-bottom: 2px solid var(--gray);
+		}
+
+		.log-title {
+			font-size: 1.2rem;
+			font-weight: 600;
+			color: var(--dark);
+		}
+
+		.connection-status {
+			font-weight: 600;
+		}
+
+		.connection-status.connected {
+			color: var(--success);
+		}
+
+		.connection-status.disconnected {
+			color: var(--danger);
+		}
+
+		.log-entry {
+			display: flex;
+			align-items: flex-start;
+			gap: 12px;
+			padding: 12px 0;
+			border-bottom: 1px solid #f1f5f9;
+			font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+			font-size: 0.9rem;
+		}
+
+		.log-entry:last-child {
+			border-bottom: none;
+		}
+
+		.log-timestamp {
+			color: var(--gray-dark);
+			white-space: nowrap;
+			font-size: 0.85rem;
+			width: 80px;
+		}
+
+		.log-key {
+			color: var(--primary);
+			font-weight: 600;
+			min-width: 200px;
+			word-break: break-all;
+		}
+
+		.log-value {
+			color: var(--dark);
+			flex: 1;
+		}
+
+		.log-entries {
+			max-height: 60vh;
+			overflow-y: auto;
+		}
+
+		.auto-scroll-toggle {
+			margin-left: 15px;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.auto-scroll-toggle input[type="checkbox"] {
+			width: 16px;
+			height: 16px;
+		}
+
+		.auto-scroll-toggle label {
+			font-size: 0.9rem;
+			color: var(--secondary);
+			cursor: pointer;
+		}
+
+		/* Loading indicator */
+		.loading {
+			text-align: center;
+			color: var(--gray-dark);
+			font-style: italic;
+			padding: 20px;
+		}
+
+		@media (max-width: 768px) {
+			.log-container {
+				padding: 15px;
+			}
+
+			.log-entry {
+				flex-direction: column;
+				gap: 4px;
+			}
+
+			.log-timestamp {
+				width: auto;
+			}
+
+			.log-key {
+				min-width: auto;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<div class="header-content">
+				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
+				<h1>Anantha</h1>
+			</div>
+			<div class="nav-links">
+				<a href="/">Dashboard</a>
+				<a href="/schedule">Schedule</a>
+				<a href="/profiles">Profiles</a>
+				<a href="/mqtt-log" class="active">MQTT Log</a>
+			</div>
+		</header>
+
+		<div class="log-container">
+			<div class="log-header">
+				<div class="log-title">Live MQTT Updates</div>
+			</div>
+
+			<div class="log-entries" id="log-entries" hx-ext="sse" sse-connect="/mqtt-log-stream" sse-swap="message" hx-swap="afterbegin">
+				<div class="loading" id="loading-msg">Connecting to MQTT log stream...</div>
+			</div>
+		</div>
+	</div>
+</body>
+</html>

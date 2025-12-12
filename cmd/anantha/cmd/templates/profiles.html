@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+	<link rel="stylesheet" href="/assets/style.css">
+	<style>
+		.profiles-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+			gap: 20px;
+			margin-top: 20px;
+		}
+
+		.profile-card {
+			background: white;
+			border-radius: var(--border-radius);
+			box-shadow: var(--box-shadow);
+			padding: 20px;
+			transition: var(--transition);
+		}
+
+		.profile-card:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+		}
+
+		.profile-header {
+			display: flex;
+			align-items: center;
+			margin-bottom: 20px;
+			padding-bottom: 15px;
+			border-bottom: 2px solid var(--gray);
+		}
+
+		.profile-icon {
+			width: 40px;
+			height: 40px;
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			margin-right: 15px;
+			font-size: 1.2rem;
+		}
+
+		.profile-home .profile-icon {
+			background-color: rgba(16, 185, 129, 0.1);
+			color: var(--success);
+		}
+
+		.profile-away .profile-icon {
+			background-color: rgba(245, 158, 11, 0.1);
+			color: var(--warning);
+		}
+
+		.profile-sleep .profile-icon {
+			background-color: rgba(59, 130, 246, 0.1);
+			color: var(--primary);
+		}
+
+		.profile-wake .profile-icon {
+			background-color: rgba(245, 158, 11, 0.1);
+			color: var(--warning);
+		}
+
+		.profile-manual .profile-icon {
+			background-color: rgba(100, 116, 139, 0.1);
+			color: var(--secondary);
+		}
+
+		.profile-name {
+			font-size: 1.2rem;
+			font-weight: 600;
+			color: var(--dark);
+			text-transform: capitalize;
+		}
+
+		.settings-grid {
+			display: grid;
+			gap: 15px;
+		}
+
+		.setting-item {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 12px 0;
+		}
+
+		.setting-label {
+			font-weight: 500;
+			color: var(--secondary);
+		}
+
+		.setting-value {
+			font-weight: 600;
+			font-size: 1.1rem;
+			color: var(--dark);
+		}
+
+		.temperature-value {
+			color: var(--primary);
+		}
+
+		.fan-value {
+			color: var(--secondary);
+			text-transform: capitalize;
+		}
+
+		.no-data {
+			text-align: center;
+			color: var(--gray-dark);
+			font-style: italic;
+			padding: 20px;
+		}
+
+		@media (max-width: 768px) {
+			.profiles-grid {
+				grid-template-columns: 1fr;
+			}
+
+			.profile-card {
+				padding: 15px;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<div class="header-content">
+				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
+				<h1>Anantha</h1>
+			</div>
+			<div class="nav-links">
+				<a href="/">Dashboard</a>
+				<a href="/schedule">Schedule</a>
+				<a href="/profiles" class="active">Profiles</a>
+				<a href="/mqtt-log">MQTT Log</a>
+			</div>
+		</header>
+
+		<div class="profiles-grid">
+			{{range .Activities}}
+			<div class="profile-card profile-{{.Name}}">
+				<div class="profile-header">
+					<div class="profile-icon">{{.Icon}}</div>
+					<div class="profile-name">{{.Name}}</div>
+				</div>
+				{{if .HasSettings}}
+				<div class="settings-grid">
+					{{if .HasHtsp}}
+					<div class="setting-item">
+						<div class="setting-label">Heat Setpoint</div>
+						<div class="setting-value temperature-value">{{.HtspFormatted}}</div>
+					</div>
+					{{end}}
+					{{if .HasClsp}}
+					<div class="setting-item">
+						<div class="setting-label">Cool Setpoint</div>
+						<div class="setting-value temperature-value">{{.ClspFormatted}}</div>
+					</div>
+					{{end}}
+					{{if .HasFan}}
+					<div class="setting-item">
+						<div class="setting-label">Fan Setting</div>
+						<div class="setting-value fan-value">{{.FanSetting}}</div>
+					</div>
+					{{end}}
+				</div>
+				{{else}}
+				<div class="no-data">No settings available</div>
+				{{end}}
+			</div>
+			{{end}}
+		</div>
+	</div>
+</body>
+</html>

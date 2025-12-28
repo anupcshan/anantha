@@ -38,9 +38,6 @@ import (
 )
 
 var (
-	//go:embed manifest.xml
-	manifestXML []byte
-
 	//go:embed assets
 	assets embed.FS
 )
@@ -416,6 +413,8 @@ func init() {
 	serveCmd.Flags().String("ha-mqtt-username", "", "Home Assistant MQTT Username")
 	serveCmd.Flags().String("ha-mqtt-password", "", "Home Assistant MQTT Password")
 	serveCmd.Flags().String("reqs-dir", "$HOME/.anantha/protos", "Directory where request protos are stored")
+	serveCmd.Flags().String("firmware-dir", "$HOME/.anantha/firmware", "Directory where firmware files are cached")
+	serveCmd.Flags().Bool("auto-fetch-firmware", false, "Automatically fetch and patch firmware from Carrier servers")
 	serveCmd.Flags().String("client-id", "", "MQTT Client ID (this should be the same as the HVAC device ID, e.g. '4123X123456')")
 	serveCmd.Flags().String("external-ip-override", "", "Override auto-detected external IP")
 	serveCmd.Flags().String("thing-name-override", "", "Thingname override - you should never need to set this")
@@ -429,6 +428,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 	haMQTTUsername, _ := cmd.Flags().GetString("ha-mqtt-username")
 	haMQTTPassword, _ := cmd.Flags().GetString("ha-mqtt-password")
 	protosDir, _ := cmd.Flags().GetString("reqs-dir")
+	firmwareDir, _ := cmd.Flags().GetString("firmware-dir")
+	autoFetchFirmware, _ := cmd.Flags().GetBool("auto-fetch-firmware")
 	clientID, _ := cmd.Flags().GetString("client-id")
 	externalIPOverride, _ := cmd.Flags().GetString("external-ip-override")
 	thingNameOverride, _ := cmd.Flags().GetString("thing-name-override")
@@ -449,13 +450,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 		log.Printf("New request %s - %s - %+v", r.Method, r.URL, r.Header)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("alive"))
-		_, _ = io.Copy(os.Stderr, r.Body)
-	})
-
-	carrierHTTPMux.HandleFunc("/manifest", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("New request %s - %s - %+v", r.Method, r.URL, r.Header)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(manifestXML)
 		_, _ = io.Copy(os.Stderr, r.Body)
 	})
 
@@ -643,6 +637,36 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 
 	log.Println("Done loading all proto messages")
+
+	// Set up firmware directory and handlers
+	expandedFirmwareDir := os.ExpandEnv(firmwareDir)
+	if err := os.MkdirAll(expandedFirmwareDir, 0755); err != nil {
+		return fmt.Errorf("failed to create firmware directory: %w", err)
+	}
+
+	// Watch for model changes to prepare firmware updates (only if enabled)
+	if autoFetchFirmware {
+		loadedValues.OnChange1("profile/model", func(tv TimestampedValue) {
+			model := tv.ToString()
+			if model == "" || model == "unknown" {
+				return
+			}
+			log.Printf("Detected thermostat model: %s, preparing firmware...", model)
+			if err := FetchAndPrepareUpdate(model, expandedFirmwareDir); err != nil {
+				log.Printf("Failed to prepare firmware for %s: %v", model, err)
+			}
+		})
+	}
+
+	// Serve manifest from firmware dir
+	carrierHTTPMux.HandleFunc("/manifest", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("New request %s - %s - %+v", r.Method, r.URL, r.Header)
+		manifestPath := filepath.Join(expandedFirmwareDir, "manifest.xml")
+		http.ServeFile(w, r, manifestPath)
+	})
+
+	// Serve firmware files from directory
+	carrierHTTPMux.Handle("/updates/", http.StripPrefix("/updates/", http.FileServer(http.Dir(expandedFirmwareDir))))
 
 	go func() {
 		if err := dnsServer.ListenAndServe(); err != nil {

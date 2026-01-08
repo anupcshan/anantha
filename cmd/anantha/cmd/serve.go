@@ -818,6 +818,22 @@ func runServe(cmd *cobra.Command, args []string) error {
 				"/usage/month2/fan",
 				"/usage/year1/fan",
 				"/usage/year2/fan",
+				// Notifications
+				"notification/1",
+				"notification/2",
+				"notification/3",
+				"notification/4",
+				"notification/5",
+				"notification/6",
+				"notification/7",
+				"notification/8",
+				"notification/9",
+				"notification/10",
+				"notification/11",
+				"notification/12",
+				"notification/13",
+				"notification/14",
+				"notification/15",
 			}
 
 			currentValues := make(map[string]TimestampedValue)
@@ -868,13 +884,53 @@ func runServe(cmd *cobra.Command, args []string) error {
 				}
 			}
 
+			// Extract notification fields from CT_STRUCT
+			extractNotificationFields := func(tv TimestampedValue) (message, timestamp, notifType string, isEmpty bool) {
+				if tv.value == nil || len(tv.value.Details) == 0 {
+					return "", "", "", true
+				}
+				for _, entry := range tv.value.Details[0].Entries {
+					switch entry.Name {
+					case "message":
+						message = string(entry.GetMaybeStrValue())
+					case "timestamp":
+						timestamp = string(entry.GetMaybeStrValue())
+					case "type":
+						notifType = string(entry.GetMaybeStrValue())
+					}
+				}
+				isEmpty = message == ""
+				return
+			}
+
+			// Format notification timestamp for display
+			formatNotificationTime := func(ts string) string {
+				t, err := time.Parse(time.RFC3339, ts)
+				if err != nil {
+					return ts
+				}
+				return t.Local().Format("Jan 2, 3:04 PM")
+			}
+
 			processUpdate := func(tv TimestampedValue) {
 				currentValues[tv.value.Name] = tv
 				if ts.Before(tv.lastUpdated) {
 					ts = tv.lastUpdated
 				}
 
-				sendEvent(tv.value.Name, tv.ToString())
+				// Handle notifications specially - send formatted HTML
+				if strings.HasPrefix(tv.value.Name, "notification/") {
+					msg, notifTs, _, isEmpty := extractNotificationFields(tv)
+					if isEmpty {
+						sendEvent(tv.value.Name, "")
+					} else {
+						html := fmt.Sprintf(`<div class="notification-item"><span class="notification-message">%s</span><span class="notification-time">%s</span></div>`,
+							msg, formatNotificationTime(notifTs))
+						sendEvent(tv.value.Name, html)
+					}
+				} else {
+					sendEvent(tv.value.Name, tv.ToString())
+				}
 				sendEvent("last-updated", ts.Format(time.DateTime))
 
 				// If it's a usage topic, recompute the relevant total

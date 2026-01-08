@@ -182,6 +182,40 @@
 			color: var(--secondary);
 			margin-top: 8px;
 		}
+
+		.notifications-container {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+			margin: 15px 0;
+		}
+
+		.notification-item {
+			background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+			border: 1px solid #3b82f6;
+			padding: 12px 16px;
+			border-radius: var(--border-radius);
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 15px;
+			color: #1e40af;
+		}
+
+		.notification-message {
+			font-weight: 500;
+			flex: 1;
+		}
+
+		.notification-time {
+			font-size: 0.85rem;
+			color: #3b82f6;
+			white-space: nowrap;
+		}
+
+		.notifications-container > div:empty {
+			display: none;
+		}
 	</style>
 </head>
 <body>
@@ -204,6 +238,23 @@
 				 hx-trigger="sse:system/vacat/vacat throttle:200ms, sse:system/vacat/vacstart throttle:200ms, sse:system/vacat/vacend throttle:200ms"
 				 hx-get="/vacation-banner"
 				 hx-swap="innerHTML">
+			</div>
+			<div class="notifications-container">
+				<div sse-swap="notification/1"></div>
+				<div sse-swap="notification/2"></div>
+				<div sse-swap="notification/3"></div>
+				<div sse-swap="notification/4"></div>
+				<div sse-swap="notification/5"></div>
+				<div sse-swap="notification/6"></div>
+				<div sse-swap="notification/7"></div>
+				<div sse-swap="notification/8"></div>
+				<div sse-swap="notification/9"></div>
+				<div sse-swap="notification/10"></div>
+				<div sse-swap="notification/11"></div>
+				<div sse-swap="notification/12"></div>
+				<div sse-swap="notification/13"></div>
+				<div sse-swap="notification/14"></div>
+				<div sse-swap="notification/15"></div>
 			</div>
 			<div class="last-updated">
 				Last updated: <span id="last-updated-text" sse-swap="last-updated">Never</span>

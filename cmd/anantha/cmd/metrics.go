@@ -151,6 +151,22 @@ func MetricsHandler(loadedValues *LoadedValues) http.Handler {
 	})
 	prometheus.MustRegister(lastMessageReceievedTimestampGauge)
 
+	var previousOpstat string
+	operationStatusGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "anantha",
+		Name:      "operation_status",
+		Help:      "Operation status (1 if current, 0 otherwise)",
+	}, []string{"status"})
+	loadedValues.OnChange1("opstat", func(opstat TimestampedValue) {
+		status := string(opstat.value.GetMaybeStrValue())
+		if previousOpstat != "" {
+			operationStatusGauge.WithLabelValues(previousOpstat).Set(0)
+		}
+		operationStatusGauge.WithLabelValues(status).Set(1)
+		previousOpstat = status
+	})
+	prometheus.MustRegister(operationStatusGauge)
+
 	yearlyUsageGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "anantha",
 		Name:      "yearly_usage",

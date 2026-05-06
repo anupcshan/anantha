@@ -360,6 +360,27 @@ func (h *HAMQTT) Run() {
 	log.Printf("Connected to %s", h.addr)
 
 	h.loadedValues.OnChange1("profile/serial", func(tv TimestampedValue) {
+		// Pull device metadata from LoadedValues if present. These are usually
+		// populated alongside profile/serial but not guaranteed on cold start;
+		// missing fields are omitted from the JSON so HA falls back to defaults
+		// rather than showing empty strings.
+		deviceField := func(key string) string {
+			v := h.loadedValues.Get(key)
+			if v.value == nil {
+				return ""
+			}
+			return string(v.value.GetMaybeStrValue())
+		}
+		serial := string(tv.value.GetMaybeStrValue())
+
+		type haDevice struct {
+			Identifiers  []string `json:"identifiers"`
+			Name         string   `json:"name"`
+			Manufacturer string   `json:"manufacturer,omitempty"`
+			Model        string   `json:"model,omitempty"`
+			SWVersion    string   `json:"sw_version,omitempty"`
+		}
+
 		discoveryMsg := struct {
 			Name                        string   `json:"name"`
 			ActionTopic                 string   `json:"action_topic"`
@@ -378,6 +399,7 @@ func (h *HAMQTT) Run() {
 			ModeStateTopic              string   `json:"mode_state_topic"`
 			Modes                       []string `json:"modes"`
 			UniqueID                    string   `json:"unique_id"`
+			Device                      haDevice `json:"device"`
 		}{
 			Name:                        "carrier",
 			ActionTopic:                 fmt.Sprintf("%s/action/current", h.topicPrefix),
@@ -396,6 +418,13 @@ func (h *HAMQTT) Run() {
 			ModeStateTopic:              fmt.Sprintf("%s/mode/current", h.topicPrefix),
 			Modes:                       []string{"auto", "off", "cool", "heat", "fan_only"},
 			UniqueID:                    h.clientID,
+			Device: haDevice{
+				Identifiers:  []string{serial},
+				Name:         "Carrier Infinity",
+				Manufacturer: deviceField("profile/brand"),
+				Model:        deviceField("profile/model"),
+				SWVersion:    deviceField("profile/firmware"),
+			},
 		}
 		discoveryMsgJSON, err := json.Marshal(discoveryMsg)
 		if err != nil {

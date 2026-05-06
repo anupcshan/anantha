@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"crypto/tls"
 	"embed"
 	"errors"
@@ -61,8 +62,9 @@ type MQTTLogger struct {
 
 	liveClients map[string]struct{}
 
-	rebirthSent     map[string]struct{}
-	rebirthSentLock sync.Mutex
+	rebirthCancels map[string]context.CancelFunc
+	rebirthLock    sync.Mutex
+	rebirthDelay   time.Duration
 }
 
 // sendRebirth publishes a Sparkplug B "Node Control/Rebirth" = true command on
@@ -92,6 +94,42 @@ func (m *MQTTLogger) sendRebirth() {
 		return
 	}
 	log.Printf("Sent Node Control/Rebirth to %s", m.cmdTopic)
+}
+
+// scheduleRebirth arranges for sendRebirth to fire after rebirthDelay. The
+// firmware silently drops rebirth requests received during its own NBIRTH
+// window (~T+30s after CONNECT); 120s clears that with margin. Idempotent per
+// client: subsequent calls during the wait are no-ops. Cancellable on CONNECT
+// via the stored cancel func.
+func (m *MQTTLogger) scheduleRebirth(clientID string) {
+	m.rebirthLock.Lock()
+	if _, exists := m.rebirthCancels[clientID]; exists {
+		m.rebirthLock.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.rebirthCancels[clientID] = cancel
+	m.rebirthLock.Unlock()
+
+	log.Printf("Scheduled Node Control/Rebirth in %s for %s", m.rebirthDelay, clientID)
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			log.Printf("Cancelled scheduled rebirth for %s", clientID)
+			return
+		case <-time.After(m.rebirthDelay):
+		}
+
+		// Remove ourselves from the map BEFORE publishing so a CONNECT racing
+		// with us doesn't try to cancel an already-completed timer. Calling
+		// cancel() on an already-completed context is harmless either way.
+		m.rebirthLock.Lock()
+		delete(m.rebirthCancels, clientID)
+		m.rebirthLock.Unlock()
+
+		m.sendRebirth()
+	}()
 }
 
 // ID returns the ID of the hook.
@@ -129,16 +167,7 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 			(m.thingNameOverride == "" && strings.HasSuffix(pk.TopicName, m.clientID)) {
 			// Client sent initial PUBLISH - ready to poll it
 			m.liveClients[cl.ID] = struct{}{}
-
-			m.rebirthSentLock.Lock()
-			_, alreadySent := m.rebirthSent[cl.ID]
-			if !alreadySent {
-				m.rebirthSent[cl.ID] = struct{}{}
-			}
-			m.rebirthSentLock.Unlock()
-			if !alreadySent {
-				m.sendRebirth()
-			}
+			m.scheduleRebirth(cl.ID)
 		}
 		protoFilename := fmt.Sprintf("%s-%s.pb", strings.ReplaceAll(string(pk.TopicName), "/", "_"), time.Now().Format(time.RFC3339Nano))
 		if err := os.WriteFile(
@@ -211,13 +240,16 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 	case packets.Connect:
 		// Empty liveClients list on CONNECT. Make sure we get a PUBLISH spBv1.0/WallCtrl/NDATA/<thingName> before polling
 		m.liveClients = map[string]struct{}{}
-		// Reset the rebirth-sent gate so the next qualifying PUBLISH triggers a
-		// fresh rebirth for this new session. CONNECT is the canonical "new
-		// session" signal — more reliable than DISCONNECT, which won't fire on
-		// abrupt drops (power loss, wifi flap with no clean LWT).
-		m.rebirthSentLock.Lock()
-		m.rebirthSent = map[string]struct{}{}
-		m.rebirthSentLock.Unlock()
+		// Cancel any in-flight rebirth timers from a prior session, then reset
+		// the map so the next qualifying PUBLISH re-schedules. CONNECT is the
+		// canonical "new session" signal - more reliable than DISCONNECT, which
+		// won't fire on abrupt drops (power loss, wifi flap with no clean LWT).
+		m.rebirthLock.Lock()
+		for _, cancel := range m.rebirthCancels {
+			cancel()
+		}
+		m.rebirthCancels = map[string]context.CancelFunc{}
+		m.rebirthLock.Unlock()
 	case packets.Pingreq:
 		// Don't log PINGREQ
 	default:
@@ -1102,7 +1134,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 		subscribedTopics:  make(map[string]struct{}),
 		loadedValues:      loadedValues,
 		liveClients:       make(map[string]struct{}),
-		rebirthSent:       make(map[string]struct{}),
+		rebirthCancels:    make(map[string]context.CancelFunc),
+		rebirthDelay:      120 * time.Second,
 	}
 
 	if err := server.AddHook(mLogger, nil); err != nil {

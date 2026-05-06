@@ -17,6 +17,12 @@
 - [x] Better proto cleanup. We dump protobufs sent by thermostat in a directory which gets garbage collected on process startup.
   Do this on a schedule or as required.
 - [x] Weather integration with Open Meteo? Currently, we pretend to be in a California summer all year round.
+- [x] Automatic full-state recovery on (re)connect. The thermostat only publishes deltas after CONNECT, so a fresh anantha
+  install (or one with an empty proto cache) used to render an empty schedule and profiles until the user manually edited
+  every field on the thermostat. Anantha now sends a Sparkplug B "Node Control/Rebirth" command 120s after the first
+  qualifying PUBLISH, which causes the firmware to dump its full state (~2200 entries) and produces a complete dashboard
+  within ~3.5 minutes of cold start. The 120s delay is necessary because the firmware silently drops rebirth requests
+  received during its own NBIRTH window.
 - [ ] Perform firmware patching via auto-update mechanism within the thermostat. Could be a way to onboard without needing an SD-card to flash firmware.
   Kind of dangerous given how some bits in the thermostat cannot be overwritten once set (like AWS IOT thingname, certs etc?). Could cause
   the thermostat to potentially get "bricked" if you want to use AWS IOT/Carrier API again.

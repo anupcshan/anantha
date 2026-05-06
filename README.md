@@ -67,6 +67,7 @@ Set your thermostat's DNS Server to Anantha's IP address.
 - HTTP server (ports 80, 443) for firmware updates and requests
 - Web dashboard (port 26268 - spells "ANANT" on a phone keypad) for debugging
 - Home Assistant integration with auto-discovery for controlling the thermostat
+- Automatic full-state synchronization on (re)connect via a Sparkplug B `Node Control/Rebirth` command
 - Optional MQTT proxying to AWS IoT (requires additional setup)
 
 ## Debugging
@@ -86,6 +87,7 @@ Known working devices and firmware versions:
 | Carrier | SYSTXCCITC01-B | v4.47 |
 | Carrier | SYSTXCCITC01-B | v4.56 |
 | Carrier | SYSTXCCITC01-B | v4.74 |
+| Carrier | SYSTXCCITC01-C | v2.00 |
 
 ## Technical Details
 
@@ -94,3 +96,11 @@ Since firmware v4.17, Carrier thermostats use AWS IoT for MQTT communication. Un
 For sparse details about the certificate generation process, see the `cmd/cagen` directory.
 
 For a barebones proto definition of the communication over MQTT, see protobuf definitions in the `proto` directory.
+
+### State synchronization
+
+The thermostat speaks a Sparkplug B-shaped protocol over MQTT and publishes deltas, not full snapshots, after its initial connect. Without intervention, a freshly-started Anantha (no on-disk proto cache) would render an empty `/schedule` and mostly-empty `/profiles` until the user manually edited every field on the thermostat. Wifi cycling on the thermostat does not help.
+
+Anantha works around this by sending a `Node Control/Rebirth = true` (CT_BOOL) command to `spBv1.0/WallCtrl/NCMD/<clientID>` 120 seconds after the first qualifying PUBLISH from the thermostat. The firmware honors this rebirth request and republishes its full state (~2200 entries: schedule, activity setpoints, sensor templates, system info), producing a fully-populated dashboard within roughly 3.5 minutes of a cold start. The 120-second delay is necessary because the firmware silently drops rebirth requests received during its own NBIRTH announcement window.
+
+The rebirth fires once per session and is reset on every CONNECT, so reconnects re-trigger it. Mid-session firings are safe no-ops if state is already in sync.

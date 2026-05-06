@@ -63,6 +63,7 @@ type MQTTLogger struct {
 	liveClients map[string]struct{}
 
 	rebirthCancels map[string]context.CancelFunc
+	rebirthFired   map[string]struct{}
 	rebirthLock    sync.Mutex
 	rebirthDelay   time.Duration
 }
@@ -98,12 +99,18 @@ func (m *MQTTLogger) sendRebirth() {
 
 // scheduleRebirth arranges for sendRebirth to fire after rebirthDelay. The
 // firmware silently drops rebirth requests received during its own NBIRTH
-// window (~T+30s after CONNECT); 120s clears that with margin. Idempotent per
-// client: subsequent calls during the wait are no-ops. Cancellable on CONNECT
-// via the stored cancel func.
+// window (~T+30s after CONNECT); 120s clears that with margin. The gate is
+// sticky for the session: once fired, subsequent qualifying PUBLISHes (notably
+// the firmware's NBIRTH response to our rebirth, which would otherwise re-
+// trigger us in a loop) are no-ops until CONNECT clears the state.
+// Cancellable mid-wait via the stored cancel func.
 func (m *MQTTLogger) scheduleRebirth(clientID string) {
 	m.rebirthLock.Lock()
-	if _, exists := m.rebirthCancels[clientID]; exists {
+	if _, fired := m.rebirthFired[clientID]; fired {
+		m.rebirthLock.Unlock()
+		return
+	}
+	if _, scheduled := m.rebirthCancels[clientID]; scheduled {
 		m.rebirthLock.Unlock()
 		return
 	}
@@ -121,11 +128,14 @@ func (m *MQTTLogger) scheduleRebirth(clientID string) {
 		case <-time.After(m.rebirthDelay):
 		}
 
-		// Remove ourselves from the map BEFORE publishing so a CONNECT racing
-		// with us doesn't try to cancel an already-completed timer. Calling
-		// cancel() on an already-completed context is harmless either way.
+		// Mark fired and remove from the cancel map atomically before publishing,
+		// so any qualifying PUBLISH that arrives in response to the rebirth (e.g.
+		// the firmware's NBIRTH) sees rebirthFired[clientID] and skips re-scheduling.
+		// Calling cancel() on an already-completed context is harmless, so a CONNECT
+		// racing with us cannot misfire.
 		m.rebirthLock.Lock()
 		delete(m.rebirthCancels, clientID)
+		m.rebirthFired[clientID] = struct{}{}
 		m.rebirthLock.Unlock()
 
 		m.sendRebirth()
@@ -240,8 +250,8 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 	case packets.Connect:
 		// Empty liveClients list on CONNECT. Make sure we get a PUBLISH spBv1.0/WallCtrl/NDATA/<thingName> before polling
 		m.liveClients = map[string]struct{}{}
-		// Cancel any in-flight rebirth timers from a prior session, then reset
-		// the map so the next qualifying PUBLISH re-schedules. CONNECT is the
+		// Cancel any in-flight rebirth timers from a prior session and clear the
+		// fired set so the next qualifying PUBLISH re-schedules. CONNECT is the
 		// canonical "new session" signal - more reliable than DISCONNECT, which
 		// won't fire on abrupt drops (power loss, wifi flap with no clean LWT).
 		m.rebirthLock.Lock()
@@ -249,6 +259,7 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 			cancel()
 		}
 		m.rebirthCancels = map[string]context.CancelFunc{}
+		m.rebirthFired = map[string]struct{}{}
 		m.rebirthLock.Unlock()
 	case packets.Pingreq:
 		// Don't log PINGREQ
@@ -1135,6 +1146,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		loadedValues:      loadedValues,
 		liveClients:       make(map[string]struct{}),
 		rebirthCancels:    make(map[string]context.CancelFunc),
+		rebirthFired:      make(map[string]struct{}),
 		rebirthDelay:      120 * time.Second,
 	}
 

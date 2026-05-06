@@ -50,6 +50,7 @@ type MQTTLogger struct {
 	iotMQTTClient     mqtt_paho.Client
 	clientID          string
 	thingNameOverride string
+	cmdTopic          string
 
 	subscribedTopics     map[string]struct{}
 	subscribedTopicsLock sync.Mutex
@@ -59,6 +60,38 @@ type MQTTLogger struct {
 	loadedValues *LoadedValues
 
 	liveClients map[string]struct{}
+
+	rebirthSent     map[string]struct{}
+	rebirthSentLock sync.Mutex
+}
+
+// sendRebirth publishes a Sparkplug B "Node Control/Rebirth" = true command on
+// the NCMD topic. The Carrier firmware honors this: it dumps full state
+// (schedule, activity setpoints, ~2200 entries) within ~17 seconds.
+func (m *MQTTLogger) sendRebirth() {
+	msg := &carrier.CarrierInfo{
+		TimestampMillis: time.Now().UnixMilli(),
+		ConfigSettings: []*carrier.ConfigSetting{
+			{
+				Name:       "Node Control/Rebirth",
+				ConfigType: carrier.ConfigType_CT_BOOL,
+				Value: &carrier.ConfigSetting_BoolValue{
+					BoolValue: true,
+				},
+			},
+		},
+		Uuid: uuid.New().String(),
+	}
+	encoded, err := proto.Marshal(msg)
+	if err != nil {
+		log.Printf("Failed to encode rebirth proto: %s", err)
+		return
+	}
+	if err := m.server.Publish(m.cmdTopic, encoded, false, 0); err != nil {
+		log.Printf("Failed to send rebirth: %s", err)
+		return
+	}
+	log.Printf("Sent Node Control/Rebirth to %s", m.cmdTopic)
 }
 
 // ID returns the ID of the hook.
@@ -96,6 +129,16 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 			(m.thingNameOverride == "" && strings.HasSuffix(pk.TopicName, m.clientID)) {
 			// Client sent initial PUBLISH - ready to poll it
 			m.liveClients[cl.ID] = struct{}{}
+
+			m.rebirthSentLock.Lock()
+			_, alreadySent := m.rebirthSent[cl.ID]
+			if !alreadySent {
+				m.rebirthSent[cl.ID] = struct{}{}
+			}
+			m.rebirthSentLock.Unlock()
+			if !alreadySent {
+				m.sendRebirth()
+			}
 		}
 		protoFilename := fmt.Sprintf("%s-%s.pb", strings.ReplaceAll(string(pk.TopicName), "/", "_"), time.Now().Format(time.RFC3339Nano))
 		if err := os.WriteFile(
@@ -168,6 +211,13 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 	case packets.Connect:
 		// Empty liveClients list on CONNECT. Make sure we get a PUBLISH spBv1.0/WallCtrl/NDATA/<thingName> before polling
 		m.liveClients = map[string]struct{}{}
+		// Reset the rebirth-sent gate so the next qualifying PUBLISH triggers a
+		// fresh rebirth for this new session. CONNECT is the canonical "new
+		// session" signal — more reliable than DISCONNECT, which won't fire on
+		// abrupt drops (power loss, wifi flap with no clean LWT).
+		m.rebirthSentLock.Lock()
+		m.rebirthSent = map[string]struct{}{}
+		m.rebirthSentLock.Unlock()
 	case packets.Pingreq:
 		// Don't log PINGREQ
 	default:
@@ -1048,9 +1098,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 		iotMQTTClient:     awsIOTMQTTClient,
 		clientID:          clientID,
 		thingNameOverride: thingNameOverride,
+		cmdTopic:          cmdTopic,
 		subscribedTopics:  make(map[string]struct{}),
 		loadedValues:      loadedValues,
 		liveClients:       make(map[string]struct{}),
+		rebirthSent:       make(map[string]struct{}),
 	}
 
 	if err := server.AddHook(mLogger, nil); err != nil {

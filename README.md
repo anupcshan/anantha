@@ -29,9 +29,10 @@ Install the anantha CLI tool:
 go install github.com/anupcshan/anantha/cmd/anantha@latest
 ```
 
-This installs a single binary `anantha` in your `$GOBIN` (typically `$HOME/go/bin`) with two main subcommands:
+This installs a single binary `anantha` in your `$GOBIN` (typically `$HOME/go/bin`) with three subcommands:
 - `anantha serve`: The main server handling HTTP/MQTT communication
 - `anantha edit-firmware`: A tool for patching firmware with the CA certificate
+- `anantha reset-ha-discovery`: A one-time helper for clearing a stale Home Assistant MQTT discovery message (see [Upgrading](#upgrading) below)
 
 ## Setup Instructions
 
@@ -59,6 +60,24 @@ anantha serve \
 ### 3. Configure Thermostat
 
 Set your thermostat's DNS Server to Anantha's IP address.
+
+## Upgrading
+
+### HA discovery cleanup (one-time, only for users upgrading from before device discovery)
+
+If you ran a previous version of anantha that did not include a `device` block in its Home Assistant MQTT discovery payload, your existing climate entity in HA is registered without a device association. After upgrading, the new payload registers a device card correctly but HA does not auto-attach the existing entity to it - you'll see a "Carrier Infinity" device with "no entities" while the orphaned entity remains in HA's Ungrouped list.
+
+Fix this once after upgrading by stopping `anantha serve`, running the cleanup subcommand, then starting `anantha serve` again. The cleanup publishes an empty retained payload to `homeassistant/climate/<CLIENT_ID>/config`, which causes HA to remove the orphaned entity registration. The next `anantha serve` start republishes discovery with the device block, and HA registers the entity fresh against the device.
+
+```bash
+anantha reset-ha-discovery \
+  --ha-mqtt-addr <HA_MQTT_IP>:1883 \
+  --ha-mqtt-username <HA_MQTT_USERNAME> \
+  --ha-mqtt-password <HA_MQTT_PASSWORD> \
+  --client-id <THERMOSTAT_DEVICE_ID>
+```
+
+This is safe to run on a fresh install or an already-migrated install: HA's entity will disappear briefly and reappear with the device association on the next `anantha serve` start.
 
 ## Features
 

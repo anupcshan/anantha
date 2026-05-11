@@ -216,6 +216,36 @@
 		.notifications-container > div:empty {
 			display: none;
 		}
+
+		.refresh-state-row {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			flex-wrap: wrap;
+			margin: 10px 0 20px 0;
+			font-size: 0.9rem;
+			color: var(--secondary);
+		}
+
+		.refresh-state-row button {
+			background-color: var(--primary);
+			color: white;
+			border: none;
+			padding: 8px 14px;
+			border-radius: var(--border-radius);
+			font-size: 0.9rem;
+			font-weight: 500;
+			cursor: pointer;
+			transition: var(--transition);
+		}
+
+		.refresh-state-row button:hover {
+			background-color: var(--primary-dark);
+		}
+
+		.refresh-state-row .error {
+			color: var(--danger);
+		}
 	</style>
 </head>
 <body>
@@ -259,6 +289,15 @@
 			<div class="last-updated">
 				Last updated: <span id="last-updated-text" sse-swap="last-updated">Never</span>
 				<span id="connection-status" class="connection-status connected">Connected</span>
+			</div>
+			<div class="refresh-state-row">
+				{{if .StateComplete}}
+				<span>Schedule and profile data are already loaded. You can refresh anyway:</span>
+				{{else}}
+				<span>Schedule and profile data look incomplete. Click to request a full state refresh from the thermostat.</span>
+				{{end}}
+				<button hx-post="/refresh-state" hx-target="#refresh-status" hx-swap="innerHTML">Refresh thermostat state</button>
+				<span id="refresh-status"></span>
 			</div>
 			<!-- System Overview Card -->
 			<div class="section-title">System Overview</div>

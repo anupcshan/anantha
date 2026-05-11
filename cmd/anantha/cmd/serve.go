@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"crypto/tls"
 	"embed"
 	"errors"
@@ -61,16 +60,15 @@ type MQTTLogger struct {
 	loadedValues *LoadedValues
 
 	liveClients map[string]struct{}
-
-	rebirthCancels map[string]context.CancelFunc
-	rebirthFired   map[string]struct{}
-	rebirthLock    sync.Mutex
-	rebirthDelay   time.Duration
 }
 
 // sendRebirth publishes a Sparkplug B "Node Control/Rebirth" = true command on
-// the NCMD topic. The Carrier firmware honors this: it dumps full state
-// (schedule, activity setpoints, ~2200 entries) within ~17 seconds.
+// the NCMD topic. The Carrier firmware honors this and replies with a full
+// NBIRTH/DBIRTH wave (~99 KB across 7 publishes over ~60 seconds), which
+// repopulates schedule, activity setpoints, and other config from the
+// thermostat.
+//
+//nolint:unused // wired up by the /refresh-state handler in a follow-up commit
 func (m *MQTTLogger) sendRebirth() {
 	msg := &carrier.CarrierInfo{
 		TimestampMillis: time.Now().UnixMilli(),
@@ -95,51 +93,6 @@ func (m *MQTTLogger) sendRebirth() {
 		return
 	}
 	log.Printf("Sent Node Control/Rebirth to %s", m.cmdTopic)
-}
-
-// scheduleRebirth arranges for sendRebirth to fire after rebirthDelay. The
-// firmware silently drops rebirth requests received during its own NBIRTH
-// window (~T+30s after CONNECT); 120s clears that with margin. The gate is
-// sticky for the session: once fired, subsequent qualifying PUBLISHes (notably
-// the firmware's NBIRTH response to our rebirth, which would otherwise re-
-// trigger us in a loop) are no-ops until CONNECT clears the state.
-// Cancellable mid-wait via the stored cancel func.
-func (m *MQTTLogger) scheduleRebirth(clientID string) {
-	m.rebirthLock.Lock()
-	if _, fired := m.rebirthFired[clientID]; fired {
-		m.rebirthLock.Unlock()
-		return
-	}
-	if _, scheduled := m.rebirthCancels[clientID]; scheduled {
-		m.rebirthLock.Unlock()
-		return
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	m.rebirthCancels[clientID] = cancel
-	m.rebirthLock.Unlock()
-
-	log.Printf("Scheduled Node Control/Rebirth in %s for %s", m.rebirthDelay, clientID)
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			log.Printf("Cancelled scheduled rebirth for %s", clientID)
-			return
-		case <-time.After(m.rebirthDelay):
-		}
-
-		// Mark fired and remove from the cancel map atomically before publishing,
-		// so any qualifying PUBLISH that arrives in response to the rebirth (e.g.
-		// the firmware's NBIRTH) sees rebirthFired[clientID] and skips re-scheduling.
-		// Calling cancel() on an already-completed context is harmless, so a CONNECT
-		// racing with us cannot misfire.
-		m.rebirthLock.Lock()
-		delete(m.rebirthCancels, clientID)
-		m.rebirthFired[clientID] = struct{}{}
-		m.rebirthLock.Unlock()
-
-		m.sendRebirth()
-	}()
 }
 
 // ID returns the ID of the hook.
@@ -177,7 +130,6 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 			(m.thingNameOverride == "" && strings.HasSuffix(pk.TopicName, m.clientID)) {
 			// Client sent initial PUBLISH - ready to poll it
 			m.liveClients[cl.ID] = struct{}{}
-			m.scheduleRebirth(cl.ID)
 		}
 		protoFilename := fmt.Sprintf("%s-%s.pb", strings.ReplaceAll(string(pk.TopicName), "/", "_"), time.Now().Format(time.RFC3339Nano))
 		if err := os.WriteFile(
@@ -250,17 +202,6 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 	case packets.Connect:
 		// Empty liveClients list on CONNECT. Make sure we get a PUBLISH spBv1.0/WallCtrl/NDATA/<thingName> before polling
 		m.liveClients = map[string]struct{}{}
-		// Cancel any in-flight rebirth timers from a prior session and clear the
-		// fired set so the next qualifying PUBLISH re-schedules. CONNECT is the
-		// canonical "new session" signal - more reliable than DISCONNECT, which
-		// won't fire on abrupt drops (power loss, wifi flap with no clean LWT).
-		m.rebirthLock.Lock()
-		for _, cancel := range m.rebirthCancels {
-			cancel()
-		}
-		m.rebirthCancels = map[string]context.CancelFunc{}
-		m.rebirthFired = map[string]struct{}{}
-		m.rebirthLock.Unlock()
 	case packets.Pingreq:
 		// Don't log PINGREQ
 	default:
@@ -1145,9 +1086,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 		subscribedTopics:  make(map[string]struct{}),
 		loadedValues:      loadedValues,
 		liveClients:       make(map[string]struct{}),
-		rebirthCancels:    make(map[string]context.CancelFunc),
-		rebirthFired:      make(map[string]struct{}),
-		rebirthDelay:      120 * time.Second,
 	}
 
 	if err := server.AddHook(mLogger, nil); err != nil {

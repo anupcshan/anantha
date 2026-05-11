@@ -61,12 +61,43 @@ type MQTTLogger struct {
 
 	liveClients map[string]struct{}
 
-	// State for the user-initiated /refresh-state button. All four fields are
+	// State for the user-initiated /refresh-state button. All five fields are
 	// guarded by refreshMu.
 	refreshMu                sync.Mutex
-	firstQualifyingPublishAt time.Time // zero when no qualifying PUBLISH seen this session
-	pendingRebirth           bool      // user clicked during the firmware NBIRTH window; fire when ready
-	rebirthLastSent          time.Time // last successful sendRebirth, for cooldown
+	firstQualifyingPublishAt time.Time   // zero when no qualifying PUBLISH seen this session
+	pendingRebirth           bool        // user clicked during the firmware NBIRTH window; fire when ready
+	pendingRebirthTimer      *time.Timer // wakes up firePendingRebirth when the NBIRTH window closes
+	rebirthLastSent          time.Time   // last successful sendRebirth, for cooldown
+}
+
+// firePendingRebirth is invoked by pendingRebirthTimer when the NBIRTH window
+// has closed. Re-checks state under the lock because CONNECT may have cleared
+// pendingRebirth, and an explicit /refresh-state click may have updated
+// rebirthLastSent during the wait. Does not log on no-op paths because they're
+// expected operating conditions, not errors.
+func (m *MQTTLogger) firePendingRebirth() {
+	const cooldown = 90 * time.Second
+
+	m.refreshMu.Lock()
+	if !m.pendingRebirth {
+		// CONNECT cleared it (or another path already fired).
+		m.refreshMu.Unlock()
+		return
+	}
+	if !m.rebirthLastSent.IsZero() && time.Since(m.rebirthLastSent) < cooldown {
+		// An explicit click during our wait already fired a rebirth. The
+		// queued one would be redundant - drop it silently.
+		m.pendingRebirth = false
+		m.refreshMu.Unlock()
+		return
+	}
+
+	m.pendingRebirth = false
+	m.rebirthLastSent = time.Now()
+	m.refreshMu.Unlock()
+
+	log.Printf("Firing queued Node Control/Rebirth (NBIRTH window cleared)")
+	m.sendRebirth()
 }
 
 // sendRebirth publishes a Sparkplug B "Node Control/Rebirth" = true command on
@@ -140,18 +171,7 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 			if m.firstQualifyingPublishAt.IsZero() {
 				m.firstQualifyingPublishAt = time.Now()
 			}
-			// If a /refresh-state click queued a rebirth while we were still in
-			// the firmware's NBIRTH window, fire it now if enough time has passed.
-			shouldFirePending := m.pendingRebirth && time.Since(m.firstQualifyingPublishAt) >= 120*time.Second
-			if shouldFirePending {
-				m.pendingRebirth = false
-				m.rebirthLastSent = time.Now()
-			}
 			m.refreshMu.Unlock()
-			if shouldFirePending {
-				log.Printf("Firing queued Node Control/Rebirth (NBIRTH window cleared)")
-				m.sendRebirth()
-			}
 		}
 		protoFilename := fmt.Sprintf("%s-%s.pb", strings.ReplaceAll(string(pk.TopicName), "/", "_"), time.Now().Format(time.RFC3339Nano))
 		if err := os.WriteFile(
@@ -228,12 +248,17 @@ func (m *MQTTLogger) OnPacketRead(cl *mqtt.Client, pk packets.Packet) (packets.P
 		// New MQTT session - clear refresh-button state from the prior session.
 		// firstQualifyingPublishAt will be re-set on the next qualifying PUBLISH
 		// (the first NDATA on the thingname-suffixed topic). pendingRebirth was
-		// queued by a click against the old session, so it's no longer valid.
+		// queued by a click against the old session, so it's no longer valid;
+		// stop its timer to avoid firing into the new session at the wrong time.
 		// rebirthLastSent intentionally survives the reconnect so the cooldown
 		// can't be bypassed by power-cycling the thermostat.
 		m.refreshMu.Lock()
 		m.firstQualifyingPublishAt = time.Time{}
 		m.pendingRebirth = false
+		if m.pendingRebirthTimer != nil {
+			m.pendingRebirthTimer.Stop()
+			m.pendingRebirthTimer = nil
+		}
 		m.refreshMu.Unlock()
 	case packets.Pingreq:
 		// Don't log PINGREQ
@@ -819,12 +844,20 @@ func runServe(cmd *cobra.Command, args []string) error {
 			}
 
 			// Subcase B: thermostat is connected but still in its NBIRTH window.
-			// Queue the click; the OnPacketRead PUBLISH branch will fire it once
-			// the window has cleared.
+			// Queue the click and set a one-shot timer that wakes up when the
+			// window closes. A re-click during the wait stops the previous
+			// timer and starts a new one (still bounded to one fire). CONNECT
+			// stops the timer entirely since the click was for the prior session.
 			if !mLogger.firstQualifyingPublishAt.IsZero() {
 				if since := now.Sub(mLogger.firstQualifyingPublishAt); since < nbirthWindow {
 					remaining := nbirthWindow - since
 					mLogger.pendingRebirth = true
+					if mLogger.pendingRebirthTimer != nil {
+						mLogger.pendingRebirthTimer.Stop()
+					}
+					// Wait a small extra beat past the window so we're clearly
+					// past it (and so jitter doesn't put us right at the edge).
+					mLogger.pendingRebirthTimer = time.AfterFunc(remaining+2*time.Second, mLogger.firePendingRebirth)
 					mLogger.refreshMu.Unlock()
 					log.Printf("Queued user-initiated rebirth; will fire in ~%s once NBIRTH window clears", remaining.Round(time.Second))
 					fmt.Fprintf(w, `<span>The thermostat just connected and is initializing. Your refresh will fire automatically in about %d seconds.</span>`, int(remaining.Round(time.Second).Seconds()))

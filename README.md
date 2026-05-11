@@ -67,7 +67,7 @@ Set your thermostat's DNS Server to Anantha's IP address.
 - HTTP server (ports 80, 443) for firmware updates and requests
 - Web dashboard (port 26268 - spells "ANANT" on a phone keypad) for debugging
 - Home Assistant integration with auto-discovery for controlling the thermostat
-- Automatic full-state synchronization on (re)connect via a Sparkplug B `Node Control/Rebirth` command
+- User-initiated full-state refresh button on the dashboard, which sends a Sparkplug B `Node Control/Rebirth` command to the thermostat
 - Optional MQTT proxying to AWS IoT (requires additional setup)
 
 ## Debugging
@@ -101,6 +101,10 @@ For a barebones proto definition of the communication over MQTT, see protobuf de
 
 The thermostat speaks a Sparkplug B-shaped protocol over MQTT and publishes deltas, not full snapshots, after its initial connect. Without intervention, a freshly-started Anantha (no on-disk proto cache) would render an empty `/schedule` and mostly-empty `/profiles` until the user manually edited every field on the thermostat. Wifi cycling on the thermostat does not help.
 
-Anantha works around this by sending a `Node Control/Rebirth = true` (CT_BOOL) command to `spBv1.0/WallCtrl/NCMD/<clientID>` 120 seconds after the first qualifying PUBLISH from the thermostat. The firmware honors this rebirth request and republishes its full state (~2200 entries: schedule, activity setpoints, sensor templates, system info), producing a fully-populated dashboard within roughly 3.5 minutes of a cold start. The 120-second delay is necessary because the firmware silently drops rebirth requests received during its own NBIRTH announcement window.
+The dashboard exposes a "Refresh thermostat state" button that sends a `Node Control/Rebirth = true` (CT_BOOL) command to `spBv1.0/WallCtrl/NCMD/<clientID>`. The firmware honors this rebirth request and republishes its full state (~2200 entries: schedule, activity setpoints, sensor templates, system info), populating the dashboard within roughly a minute. The button's pre-text changes based on a per-page-load completeness check so the user can see whether a refresh is likely useful, but it remains clickable in either case.
 
-The rebirth fires once per session and is reset on every CONNECT, so reconnects re-trigger it. Mid-session firings are safe no-ops if state is already in sync.
+A few protections keep the firmware from being hammered:
+
+- Server-side cooldown of 90 seconds between successful sends (the response itself takes ~60 seconds to drain, so this leaves comfortable headroom).
+- If the click arrives during the firmware's NBIRTH announcement window (the first 120 seconds after CONNECT, during which it silently drops rebirth requests), the click is queued and a one-shot timer fires the rebirth as soon as the window clears.
+- If the thermostat has not yet published anything to Anantha, the click short-circuits with a clear message instead of sending into the void.

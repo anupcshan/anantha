@@ -42,10 +42,18 @@ func init() {
 	}
 }
 
+// IndexData holds data for the index/dashboard template
+type IndexData struct {
+	StateComplete bool
+}
+
 // RenderIndex renders the index/dashboard template
-func RenderIndex() (string, error) {
+func RenderIndex(loadedValues *LoadedValues) (string, error) {
+	data := IndexData{
+		StateComplete: stateLooksComplete(loadedValues),
+	}
 	var buf bytes.Buffer
-	if err := indexTemplate.Execute(&buf, nil); err != nil {
+	if err := indexTemplate.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute index template: %w", err)
 	}
 	return buf.String(), nil

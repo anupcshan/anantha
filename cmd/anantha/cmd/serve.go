@@ -801,7 +801,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		webControlMux.Handle("/metrics", MetricsHandler(loadedValues))
 		webControlMux.Handle("/assets/", http.FileServer(http.FS(assets)))
 		webControlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			indexHTML, err := RenderIndex()
+			indexHTML, err := RenderIndex(loadedValues)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("Error rendering index: %v", err), http.StatusInternalServerError)
 				return

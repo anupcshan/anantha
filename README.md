@@ -1,3 +1,5 @@
+
+
 <div align="center">
   <img src="cmd/anantha/cmd/assets/logo.svg" alt="Anantha Logo" width="200" height="200">
 </div>
@@ -12,7 +14,7 @@ Anantha (അനന്ത) is a Malayalam word meaning "infinite".
 
 > ⚠️ **WARNING**: Using Anantha requires modifying your thermostat's firmware which will likely void your warranty. Improper use of your thermostat/HVAC may cause its destruction or lead to property damage. Use at your own risk. Anantha is not affiliated with Carrier and assumes no responsibility for any issues that may arise.
 
-> ⚠️ **WARNING**: Installing this modified *will* disable your thermostat from communicating directly with Carrier's APIs. This means you will not be able to use the Carrier mobile app or web interface to control your thermostat. DO NOT install this firmware if you want to use the Carrier mobile app.
+> ⚠️ **WARNING**: Installing this modified firmware will disable your thermostat from communicating directly with Carrier's APIs. This means you will not be able to use the Carrier mobile app or web interface to control your thermostat. DO NOT install this firmware if you want to use the Carrier mobile app.
 
 This project was inspired by [Infinitude](https://github.com/nebulous/infinitude) and supports the MQTT-based protocol used since firmware version v4.17.
 
